@@ -30,7 +30,7 @@ import cv2
 import gradio as gr
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import numpy as np
 import torch
 import yaml
@@ -44,6 +44,7 @@ CONFIG_PATH = ROOT_DIR / "config.yaml"
 CHECKPOINT_PATH = ROOT_DIR / "checkpoints" / "ProposedResCNNBiLSTMAttn_best.pt"
 SAMPLES_DIR = ROOT_DIR / "data" / "samples"
 SAMPLES_MANIFEST = SAMPLES_DIR / "samples_labels.json"
+REF_VIDEOS_DIR = ROOT_DIR / "reference_videos"
 CONFIDENCE_THRESHOLD = 0.50
 
 
@@ -88,9 +89,10 @@ def plot_attention_weights(
     attn_weights: Optional[np.ndarray],
     pred_label: str,
     confidence: float,
-) -> plt.Figure:
+) -> Figure:
     """Create a 30-frame Temporal Attention Weight bar chart highlighting peak frames."""
-    fig, ax = plt.subplots(figsize=(8.5, 3.8))
+    fig = Figure(figsize=(8.5, 3.8))
+    ax = fig.add_subplot(111)
     if attn_weights is None:
         ax.text(0.5, 0.5, "Attention weights unavailable", ha="center", va="center")
         ax.axis("off")
@@ -196,7 +198,7 @@ def _run_model_forward(
     return label, conf, probs, predictor.last_attention
 
 
-def predict_sample_npy(sample_rel_path: str) -> Tuple[str, Dict[str, float], plt.Figure, str]:
+def predict_sample_npy(sample_rel_path: str) -> Tuple[str, Dict[str, float], Figure, str]:
     """Run inference directly on one of the pre-extracted (30, 450) sample .npy files."""
     if not sample_rel_path:
         raise gr.Error("Please select a sample .npy file.")
@@ -215,7 +217,7 @@ def predict_video_file(
     video_path: Optional[str],
     flip_horizontal: bool = False,
     trim_idle: bool = False,
-) -> Tuple[str, Dict[str, float], plt.Figure]:
+) -> Tuple[str, Dict[str, float], Figure]:
     """Extract (30, 450) Holistic landmarks from an .mp4 / webcam clip and predict."""
     if not video_path:
         raise gr.Error("Please provide or record a video first.")
@@ -234,29 +236,52 @@ def predict_video_file(
 def predict_webcam_video(
     video_path: Optional[str],
     flip_horizontal: bool = False,
-) -> Tuple[str, Dict[str, float], plt.Figure]:
+) -> Tuple[str, Dict[str, float], Figure]:
     """Trim idle start/end frames (with optional horizontal flip) before inference."""
     return predict_video_file(video_path, flip_horizontal=flip_horizontal, trim_idle=True)
 
 
-# ─── Gradio Blocks UI ────────────────────────────────────────────────────────
+# ─── Reference Sign Gallery & Tips ───────────────────────────────────────────
 
-SIGN_GUIDE_MARKDOWN = """
-Keep your **head, shoulders, and both hands** visible in frame at chest-to-forehead height (about arm's length from the camera), pause briefly before and after signing, and perform one of these 10 trained ASL glosses:
+SIGN_TIPS: Dict[str, str] = {
+    "before": "Hold your non-dominant flat hand upright (palm facing you); place the dominant flat hand just in front of it and move the dominant hand backward toward your chest.",
+    "computer": "Form a **C** handshape with your dominant hand and arc it up onto the forearm (or bounce twice along the upper forearm) of your bent non-dominant arm.",
+    "cool": "Place the thumbs of both open **5** hands near your cheeks/jawline and wiggle your fingers outward slightly.",
+    "cousin": "Form a **C** handshape with your dominant hand near the side of your forehead/temple and twist it gently forward and back.",
+    "drink": "Form a **C** handshape (like holding a cup) and tilt it up toward your mouth as if taking a sip.",
+    "go": "Point both index fingers (**1** handshape) forward at chest level and arc both hands away from you simultaneously.",
+    "help": "Place a closed dominant **A** fist (thumb up) resting on your flat upward-facing non-dominant palm, then lift both hands upward together.",
+    "tall": "Hold your non-dominant flat palm vertical in front of you and slide your dominant index finger upward along that palm past the fingertips.",
+    "thin": "Extend both pinky fingers (**I** handshape) touching tip-to-tip in front of your chest, then pull them apart vertically or outward smoothly.",
+    "who": "Touch your dominant index finger (**1** handshape) or thumb to your chin and wiggle the index finger slightly downward/inward.",
+}
 
-| Gloss | How to Perform the Gesture Clearly in Front of the Camera |
-|---|---|
-| **`before`** | Hold your non-dominant flat hand upright (palm facing you); place the dominant flat hand just in front of it and move the dominant hand backward toward your chest. |
-| **`computer`** | Form a **`C`** handshape with your dominant hand and arc it up onto the forearm (or bounce twice along the upper forearm) of your bent non-dominant arm. |
-| **`cool`** | Place the thumbs of both open **`5`** hands near your cheeks/jawline and wiggle your fingers outward slightly. |
-| **`cousin`** | Form a **`C`** handshape with your dominant hand near the side of your forehead/temple and twist it gently forward and back. |
-| **`drink`** | Form a **`C`** handshape (like holding a cup) and tilt it up toward your mouth as if taking a sip. |
-| **`go`** | Point both index fingers (`1` handshape) forward at chest level and arc both hands away from you simultaneously. |
-| **`help`** | Place a closed dominant **`A`** fist (thumb up) resting on your flat upward-facing non-dominant palm, then lift both hands upward together. |
-| **`tall`** | Hold your non-dominant flat palm vertical in front of you and slide your dominant index finger upward along that palm past the fingertips. |
-| **`thin`** | Extend both pinky fingers (`I` handshape) touching tip-to-tip in front of your chest, then pull them apart vertically or outward smoothly. |
-| **`who`** | Touch your dominant index finger (`1` handshape) or thumb to your chin and wiggle the index finger slightly downward/inward. |
-"""
+REFERENCE_GLOSSES: List[str] = list(SIGN_TIPS.keys())
+REFERENCE_EXAMPLES: List[List[str]] = [
+    [str(REF_VIDEOS_DIR / f"{gloss}.mp4")]
+    for gloss in REFERENCE_GLOSSES
+    if (REF_VIDEOS_DIR / f"{gloss}.mp4").is_file()
+]
+
+
+def get_reference_sign(gloss: str) -> Tuple[Optional[str], str]:
+    """Return (reference_video_path, formatted_markdown_tip) for the selected gloss."""
+    key = str(gloss).strip().lower()
+    tip = SIGN_TIPS.get(key, "Select one of the 10 WLASL glosses above.")
+    vid_path = REF_VIDEOS_DIR / f"{key}.mp4"
+    video_str = str(vid_path) if vid_path.is_file() else None
+    md = (
+        f"### How to Sign **`{key.upper()}`**\n\n"
+        f"{tip}\n\n"
+        f"**Camera Tip:** Keep your head, shoulders, and hands clearly inside the frame at arm's length, "
+        f"perform the full movement cleanly, and pause briefly before ending recording."
+    )
+    return video_str, md
+
+
+DEFAULT_REF_GLOSS = "drink"
+DEFAULT_REF_VIDEO, DEFAULT_REF_MD = get_reference_sign(DEFAULT_REF_GLOSS)
+
 
 with gr.Blocks(title="WLASL-10 Sign Language Recognition (ResCNN-BiLSTM-Attention)") as demo:
     gr.Markdown(
@@ -267,8 +292,27 @@ with gr.Blocks(title="WLASL-10 Sign Language Recognition (ResCNN-BiLSTM-Attentio
         """
     )
 
-    with gr.Accordion("📖 Supported 10 WLASL Glosses & Gesture Reference Guide (Click to Expand)", open=True):
-        gr.Markdown(SIGN_GUIDE_MARKDOWN)
+    with gr.Accordion("🎬 Visual Sign Reference Guide — Watch a Real Example for Any of the 10 Words", open=True):
+        ref_selector = gr.Radio(
+            choices=REFERENCE_GLOSSES,
+            value=DEFAULT_REF_GLOSS,
+            label="Pick a Sign Word to Watch & Imitate",
+        )
+        with gr.Row():
+            ref_video_player = gr.Video(
+                value=DEFAULT_REF_VIDEO,
+                label="WLASL Reference Video (Watch Handshape, Position & Timing)",
+                interactive=False,
+                loop=True,
+                height=280,
+            )
+            ref_tip_md = gr.Markdown(value=DEFAULT_REF_MD)
+
+        ref_selector.change(
+            fn=get_reference_sign,
+            inputs=ref_selector,
+            outputs=[ref_video_player, ref_tip_md],
+        )
 
     with gr.Tabs():
         # Tab 1: Pre-Loaded Samples
@@ -299,13 +343,23 @@ with gr.Blocks(title="WLASL-10 Sign Language Recognition (ResCNN-BiLSTM-Attentio
 
         # Tab 2: Upload .mp4 Video
         with gr.Tab("Upload .mp4 Video"):
-            gr.Markdown("Upload an `.mp4` sign video clip to run full MediaPipe Holistic landmark extraction and inference.")
+            gr.Markdown(
+                "Upload any `.mp4` sign video clip—or click one of the **10 pre-loaded WLASL reference clips** below—to run "
+                "full MediaPipe Holistic landmark extraction and model inference."
+            )
             upload_video = gr.Video(sources=["upload"], label="Upload Sign Video (.mp4)")
             upload_btn = gr.Button("Extract Landmarks & Predict", variant="primary")
             upload_status_md = gr.Markdown(value="")
             with gr.Row():
                 upload_label_out = gr.Label(num_top_classes=3, label="Top-3 Predicted Glosses")
                 upload_attn_plot = gr.Plot(label="Temporal Attention Weights (Frames 0–29)")
+
+            if REFERENCE_EXAMPLES:
+                gr.Examples(
+                    examples=REFERENCE_EXAMPLES,
+                    inputs=upload_video,
+                    label="1-Click Reference Clips (All 10 WLASL Glosses)",
+                )
 
             upload_btn.click(
                 fn=predict_video_file,

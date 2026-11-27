@@ -140,7 +140,7 @@ Try the hosted Gradio application directly in your browser on Hugging Face Space
 
 👉 **https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION**
 
-[`app.py`](app.py) exposes a 3-tab Gradio interface (`Test Pre-Loaded Samples`, `Upload .mp4 Video`, and `Webcam Capture` with horizontal un-mirroring and active-motion trimming) returning Top-3 predicted glosses, out-of-vocabulary confidence gating (`threshold = 0.50`), and a 30-frame Temporal Attention bar chart highlighting the top-5 active gesture frames.
+[`app.py`](app.py) exposes an interactive **Visual 10-Sign Video Reference Guide** (`reference_videos/*.mp4`) alongside a 3-tab Gradio interface (`Test Pre-Loaded Samples`, `Upload .mp4 Video` with 1-click reference examples, and `Webcam Capture` with active-motion trimming) returning Top-3 predicted glosses, out-of-vocabulary confidence gating (`threshold = 0.50`), and a 30-frame Temporal Attention bar chart highlighting the top-5 active gesture frames.
 
 ### Launch Gradio Web App Locally
 
@@ -151,7 +151,7 @@ python app.py
 ### Deploy on Hugging Face Spaces
 
 1. Create a new Space on Hugging Face with **Gradio** as the SDK (`Python 3.11`, ZeroGPU or CPU).
-2. Push this repository (`app.py`, `requirements.txt`, `config.yaml`, `src/`, `checkpoints/`, `data/samples/`).
+2. Push this repository (`app.py`, `requirements.txt`, `config.yaml`, `src/`, `checkpoints/`, `data/samples/`, `reference_videos/`).
 3. Hugging Face Spaces installs `requirements.txt` (including `mediapipe==0.10.14` and `gradio`) and launches `app.py` automatically via `demo.launch()`.
 
 ### Environment Setup & Test Suite
