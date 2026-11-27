@@ -6,6 +6,10 @@
 [![Pytest 40/40 Passing](https://img.shields.io/badge/Pytest-40%2F40%20Passing-2EA44F?logo=pytest&logoColor=white)](tests/test_pipeline.py)
 [![Dataset WLASL-10 Signer-Disjoint](https://img.shields.io/badge/Dataset-WLASL--10%20Signer--Disjoint-6366F1)](data/WLASL_v0.3.json)
 [![Gradio Demo](https://img.shields.io/badge/Gradio-Web%20Demo-F97316?logo=gradio&logoColor=white)](https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION)
+[![Watch Demo Video](https://img.shields.io/badge/Video-Live%20Demo%20(3m%2042s)-DC2626?logo=youtube&logoColor=white)](assets/live_demo.mp4)
+
+> 🎬 **Live End-to-End Video Demo (`Uploaded .mp4` + `Live Webcam Capture`):** [**▶ Watch Live Demo & Walkthrough (`assets/live_demo.mp4`)**](assets/live_demo.mp4)  
+> 🌐 **Interactive Hugging Face Spaces App:** **https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION**
 
 Dynamic word-level sign language is inherently a spatio-temporal motion problem: words such as `before`, `drink`, and `tall` depend on hand trajectory, velocity, and height relative to the signer's face and torso—cues that static A–Z finger-spelling classifiers discard completely. This repository implements an end-to-end **MediaPipe Holistic + Multi-Scale Residual 1D-CNN + Bidirectional LSTM + Temporal Self-Attention** pipeline trained and benchmarked strictly on **unseen signers** from WLASL v0.3. Everything—from raw `.mp4` landmark extraction and signer-disjoint dataset splitting to 4-model CPU latency benchmarking and an interactive 3-tab Gradio web application—is reproducible from a single repository.
 
