@@ -11,6 +11,17 @@ and is compatible out-of-the-box with Hugging Face Spaces (Gradio SDK).
 
 from __future__ import annotations
 
+try:
+    import spaces
+except ImportError:
+    class _DummySpaces:
+        @staticmethod
+        def GPU(*args, **kwargs):
+            def decorator(fn):
+                return fn
+            return decorator if not args or not callable(args[0]) else args[0]
+    spaces = _DummySpaces()
+
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -131,6 +142,17 @@ def get_sample_ground_truth(sample_rel_path: str) -> str:
     )
 
 
+@spaces.GPU(duration=30)
+def _run_model_forward(
+    feat: np.ndarray,
+) -> Tuple[str, float, np.ndarray, Optional[np.ndarray]]:
+    """Run ProposedResCNNBiLSTMAttn forward pass on GPU (ZeroGPU) or CPU."""
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    predictor = Predictor(MODEL, extractor=None, idx_to_label=IDX_TO_LABEL, device=device)
+    label, conf, probs = predictor._infer_features(feat)
+    return label, conf, probs, predictor.last_attention
+
+
 def predict_sample_npy(sample_rel_path: str) -> Tuple[Dict[str, float], plt.Figure, str]:
     """Run inference directly on one of the pre-extracted (30, 450) sample .npy files."""
     if not sample_rel_path:
@@ -139,10 +161,9 @@ def predict_sample_npy(sample_rel_path: str) -> Tuple[Dict[str, float], plt.Figu
     if not full_path.is_file():
         raise gr.Error(f"Sample file not found: {sample_rel_path}")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    predictor = Predictor(MODEL, extractor=None, idx_to_label=IDX_TO_LABEL, device=device)
-    label, conf, probs = predictor.predict_npy(str(full_path))
-    fig = plot_attention_weights(predictor.last_attention, label, conf)
+    feat = np.load(str(full_path)).astype(np.float32)
+    label, conf, probs, attn = _run_model_forward(feat)
+    fig = plot_attention_weights(attn, label, conf)
     return _format_top_probs(probs), fig, get_sample_ground_truth(sample_rel_path)
 
 
@@ -151,13 +172,12 @@ def predict_video_file(video_path: Optional[str]) -> Tuple[Dict[str, float], plt
     if not video_path:
         raise gr.Error("Please provide or record a video first.")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     seq_len = int(CONFIG.get("sequence_length", 30))
     with LandmarkExtractor(sequence_length=seq_len, static_image_mode=False) as extractor:
-        predictor = Predictor(MODEL, extractor=extractor, idx_to_label=IDX_TO_LABEL, device=device)
-        label, conf, probs = predictor.predict_video(video_path)
+        feat = extractor.process_video(video_path)
 
-    fig = plot_attention_weights(predictor.last_attention, label, conf)
+    label, conf, probs, attn = _run_model_forward(feat)
+    fig = plot_attention_weights(attn, label, conf)
     return _format_top_probs(probs), fig
 
 
