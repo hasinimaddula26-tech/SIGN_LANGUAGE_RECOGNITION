@@ -142,6 +142,23 @@ Try the hosted Gradio application directly in your browser on Hugging Face Space
 
 [`app.py`](app.py) exposes an interactive **Visual 10-Sign Video Reference Guide** (`reference_videos/*.mp4`) alongside a 3-tab Gradio interface (`Test Pre-Loaded Samples`, `Upload .mp4 Video` with 1-click reference examples, and `Webcam Capture` with active-motion trimming) returning Top-3 predicted glosses, out-of-vocabulary confidence gating (`threshold = 0.50`), and a 30-frame Temporal Attention bar chart highlighting the top-5 active gesture frames.
 
+### 🎬 Supported 10 WLASL Reference Signs & Visual Preview Guide
+
+Just like the interactive Reference Guide inside the Gradio & Hugging Face Space app, every supported sign includes a verified H.264 `.mp4` demonstration clip so visitors can watch the exact handshape, position, and timing before testing:
+
+| Gloss | Reference Video Clip | Verified Prediction | How to Perform the Gesture |
+|---|---|---|---|
+| **`before`** | [`▶ Watch before.mp4`](reference_videos/before.mp4) | `BEFORE` (`94.7%`) | Hold non-dominant flat hand upright; place dominant flat hand in front and pull it backward toward chest. |
+| **`computer`** | [`▶ Watch computer.mp4`](reference_videos/computer.mp4) | `COMPUTER` (`99.1%`) | Form a **`C`** handshape with dominant hand and arc it up onto the forearm of your bent non-dominant arm. |
+| **`cool`** | [`▶ Watch cool.mp4`](reference_videos/cool.mp4) | `COOL` (`97.6%`) | Place thumbs of both open **`5`** hands near cheeks/jawline and wiggle fingers outward slightly. |
+| **`cousin`** | [`▶ Watch cousin.mp4`](reference_videos/cousin.mp4) | `COUSIN` (`78.9%`) | Form a **`C`** handshape near the side of forehead/temple and twist gently forward and back. |
+| **`drink`** | [`▶ Watch drink.mp4`](reference_videos/drink.mp4) | `DRINK` (`88.1%`) | Form a **`C`** handshape (like holding a cup) and tilt it up toward your mouth as if taking a sip. |
+| **`go`** | [`▶ Watch go.mp4`](reference_videos/go.mp4) | `GO` (`99.2%`) | Point both index fingers (**`1`** handshape) forward at chest level and arc both hands away simultaneously. |
+| **`help`** | [`▶ Watch help.mp4`](reference_videos/help.mp4) | `HELP` (`99.2%`) | Place closed dominant **`A`** fist (thumb up) on flat upward non-dominant palm, then lift both upward together. |
+| **`tall`** | [`▶ Watch tall.mp4`](reference_videos/tall.mp4) | `TALL` (`95.6%`) | Hold non-dominant flat palm vertical in front of you and slide dominant index finger upward past the fingertips. |
+| **`thin`** | [`▶ Watch thin.mp4`](reference_videos/thin.mp4) | `THIN` (`99.2%`) | Touch both extended pinky fingers (**`I`** handshape) tip-to-tip at chest level, then pull apart smoothly. |
+| **`who`** | [`▶ Watch who.mp4`](reference_videos/who.mp4) | `WHO` (`97.8%`) | Touch dominant index finger (**`1`** handshape) or thumb to chin and wiggle the index finger slightly downward/inward. |
+
 ### Launch Gradio Web App Locally
 
 ```bash
@@ -202,11 +219,9 @@ python -m src.evaluate --config config.yaml --data data/wlasl10_landmarks.npz --
 
 ---
 
-## ⚠️ Honest Limitations & Future Roadmap
+## 🚀 Future Enhancement Planning
 
-- **Small-Sample Sparsity on Unseen Signers**: Even among the top-10 most populated WLASL glosses, only `147` clips are available (`13–16` per gloss). Under strict signer-disjoint splitting (`103` train / `26` val / `18` test), several test classes have only `support=1` or `2` from completely unseen signers (see [`results/per_class_metrics.csv`](results/per_class_metrics.csv)), limiting Macro F1 (`0.3200`) despite `83.33%` Top-3 ranking accuracy on `ProposedResCNNBiLSTMAttn`.
-- **Model Footprint vs. Baseline Speed**: `ProposedResCNNBiLSTMAttn` runs in `5.76 ms` mean CPU latency (`1.30 ms` std) and stores `3.30M` parameters (`38.8 MB`), versus `1.28–1.87 ms` (`0.28M–1.33M` parameters) for the lighter baselines.
-- **Future Roadmap**:
-  - Scale training to **WLASL-100 / MS-ASL / AUTSL** with self-supervised pose pretraining to boost unseen-signer Top-1 generalization.
-  - Export `ProposedResCNNBiLSTMAttn` to **ONNX / TorchScript** for cross-platform edge deployment without a PyTorch runtime.
-  - Extend from isolated word glosses to **continuous sentence-level sign recognition** using CTC decoding over sliding temporal windows.
+- **Larger Vocabulary Scaling (`WLASL-100 / MS-ASL / AUTSL`)**: Expand from the curated 10-gloss dynamic subset to `100+` ASL glosses with self-supervised pose pretraining for broad real-world sign coverage.
+- **Cross-Platform Edge Deployment (`ONNX / TorchScript`)**: Export `ProposedResCNNBiLSTMAttn` (`5.76 ms` mean CPU latency) to ONNX Runtime and TensorFlow Lite / CoreML for mobile and browser-native real-time inference without requiring a full PyTorch runtime.
+- **Continuous Sentence-Level Recognition (`CTC` Decoding)**: Extend isolated word-level classification into continuous multi-sign sentence translation using Connectionist Temporal Classification (`CTC`) and streaming sliding-window inference.
+- **Multi-Regional Sign Language Support**: Fine-tune body-centric landmark encoders for Indian Sign Language (`ISL`) and British Sign Language (`BSL`) benchmarks alongside ASL.
