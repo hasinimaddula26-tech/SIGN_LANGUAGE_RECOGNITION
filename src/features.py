@@ -132,13 +132,13 @@ def trim_active_motion(
     frames_landmarks: np.ndarray,
     margin: int = 3,
     min_active_frames: int = 8,
-    threshold_ratio: float = 0.20,
+    threshold_ratio: float = 0.08,
 ) -> np.ndarray:
     """Trim leading and trailing idle frames using hand-landmark speed.
 
     Computes per-frame L2 norm of frame-to-frame hand coordinate differences
     across indices ``99:225`` (21 left-hand + 21 right-hand × 3 coordinates).
-    Finds the contiguous window where hand speed exceeds ``20%`` of the clip's
+    Finds the contiguous window where hand speed exceeds ``8%`` of the clip's
     90th-percentile hand speed, expands by ``±margin`` frames, and falls back
     to the full clip if fewer than ``min_active_frames`` active frames exist.
     """

@@ -29,11 +29,11 @@ lstm_dropout: 0.3
 fc_dropout: 0.4
 
 # ── Training ─────────────────────────────────────────────────
-batch_size: 32
+batch_size: 16
 learning_rate: 1.0e-3
 weight_decay: 1.0e-2
 num_epochs: 50
-early_stopping_patience: 10
+early_stopping_patience: 15
 val_split: 0.15
 test_split: 0.15
 grad_clip: 1.0

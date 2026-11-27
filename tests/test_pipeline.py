@@ -436,6 +436,31 @@ class TestDatasetWLASL:
         # Velocity at t=0 remains 0 after augmentation
         assert torch.allclose(rx1[0, N_COORDS:], torch.zeros(N_COORDS))
 
+    def test_horizontal_mirror_augmentation_swaps_hands_and_negates_x(self):
+        """Mirror augmentation (mirror_prob=1.0) negates X and swaps L/R hands."""
+        base = np.zeros((1, 30, 450), dtype=np.float32)
+        # Put non-zero coordinates only in right hand [54:75] -> indices 162:225
+        base[0, :, 162:225] = 0.25
+        ds = SignLanguageDataset(
+            X=base,
+            y=np.array([0], dtype=np.int64),
+            augment=True,
+            jitter_std=0.0,
+            speed_range=(1.0, 1.0),
+            crop_range=(1.0, 1.0),
+            scale_range=(1.0, 1.0),
+            shift_range=(0.0, 0.0),
+            mirror_prob=1.0,
+            seed=7,
+        )
+        mirrored, _ = ds[0]
+        arr = mirrored.numpy()
+        # Right hand should move to left hand [99:162] with negated X
+        np.testing.assert_allclose(arr[:, 162:225], 0.0, atol=1e-6)
+        lh = arr[:, 99:162].reshape(30, 21, 3)
+        np.testing.assert_allclose(lh[:, :, 0], -0.25, atol=1e-6)
+        np.testing.assert_allclose(lh[:, :, 1:], 0.25, atol=1e-6)
+
     def test_smoke_test_cli_isolated(self, tmp_path):
         """--smoke-test-data CLI runs in memory without creating data/wlasl10_landmarks.npz."""
         repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

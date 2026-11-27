@@ -3,7 +3,7 @@
 [![Python 3.11](https://img.shields.io/badge/Python-3.11.9-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch 2.15](https://img.shields.io/badge/PyTorch-2.15.0%2Bcpu-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![MediaPipe 0.10.14](https://img.shields.io/badge/MediaPipe-0.10.14-0097A7?logo=google&logoColor=white)](https://developers.google.com/mediapipe)
-[![Pytest 39/39 Passing](https://img.shields.io/badge/Pytest-39%2F39%20Passing-2EA44F?logo=pytest&logoColor=white)](tests/test_pipeline.py)
+[![Pytest 40/40 Passing](https://img.shields.io/badge/Pytest-40%2F40%20Passing-2EA44F?logo=pytest&logoColor=white)](tests/test_pipeline.py)
 [![Dataset WLASL-10 Signer-Disjoint](https://img.shields.io/badge/Dataset-WLASL--10%20Signer--Disjoint-6366F1)](data/WLASL_v0.3.json)
 [![Gradio Demo](https://img.shields.io/badge/Gradio-Web%20Demo-F97316?logo=gradio&logoColor=white)](https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION)
 
@@ -17,11 +17,11 @@ Dynamic word-level sign language is inherently a spatio-temporal motion problem:
 |---|---:|---|
 | **Raw Corpus Inspected** | `11,980` `.mp4` videos | Scanned across `2,000` gloss entries in `WLASL_v0.3.json` |
 | **Curated Dynamic Subset (WLASL-10)** | `147` clips (`10` glosses) | Top 10 dynamic words ranked by clip count & multi-signer diversity |
-| **Training Set** | `103` clips (`~70%`, `23` signers) | Train-only augmentation (`80%–100%` crop, `0.90–1.10x` scale, `±0.03` shift, `±15%` speed, `std=0.015` jitter) |
-| **Validation Set** | `26` clips (`~15%`, `7` signers) | Early stopping (`patience=10`) & best-checkpoint selection |
+| **Training Set** | `103` clips (`~70%`, `23` signers) | Train-only augmentation (`80%–100%` crop, `0.90–1.10x` scale, `±0.03` shift, `±15%` speed, `0.5` L/R mirror, `std=0.015` jitter) |
+| **Validation Set** | `26` clips (`~15%`, `7` signers) | Class-balanced val loss selection & early stopping (`patience=15`) |
 | **Held-Out Test Set** | `18` clips (`~15%`, `6` signers) | Completely unseen signers (**0% signer overlap** across all splits) |
 | **Input Tensor Shape** | `(30, 450)` `float32` | `225` body-centric `(x, y, z)` coordinates + `225` frame-to-frame velocities |
-| **Automated Test Suite** | `39 / 39` passing | Verified via `pytest tests/ -v` across unit, pipeline, and end-to-end tests |
+| **Automated Test Suite** | `40 / 40` passing | Verified via `pytest tests/ -v` across unit, pipeline, and end-to-end tests |
 
 ---
 
@@ -71,7 +71,7 @@ Static coordinates alone cannot separate directional signs with overlapping hand
 - **Learnable `TemporalSelfAttention`**: Computes softmax-normalized weights $\alpha \in \mathbb{R}^{30}$ ($\sum_{t=0}^{29}\alpha_t = 1.0$) returning `(logits, attention_weights)`, surfacing exactly which frames drive each classification.
 
 ### 4. Leak-Free Signer-Disjoint Evaluation Protocol (`src/dataset.py`)
-Random clip splits leak signer biometrics, clothing framing, and signing style across train and test sets. We enforce **Signer-Aware Stratified Splitting** using `StratifiedGroupKFold` grouped on `signer_id` (`seed=42`), asserting **zero signer overlap** between train (`23` signers), validation (`7` signers), and test (`6` signers). Domain-shift augmentation—random contiguous temporal crops (`80%–100%`), spatial scale jitter (`0.90x–1.10x`), shoulder-center shift (`±0.03`), temporal speed resampling (`±15%`), and Gaussian joint noise (`std=0.015`) on detected joints with velocity recomputation—is restricted strictly to the training `Dataset`, paired with active-motion trimming (`trim_active_motion`) for live webcam recordings.
+Random clip splits leak signer biometrics, clothing framing, and signing style across train and test sets. We enforce **Signer-Aware Stratified Splitting** using `StratifiedGroupKFold` grouped on `signer_id` (`seed=42`), asserting **zero signer overlap** between train (`23` signers), validation (`7` signers), and test (`6` signers). Domain-shift augmentation—random contiguous temporal crops (`80%–100%`), temporal speed resampling (`±15%`), horizontal left/right mirroring (`mirror_prob=0.5`, negating `x` and swapping left/right pose & hands), spatial scale jitter (`0.90x–1.10x`), shoulder-center shift (`±0.03`), and Gaussian joint noise (`std=0.015`) on detected joints with velocity recomputation—is restricted strictly to the training `Dataset`, paired with active-motion trimming (`trim_active_motion`) for live webcam recordings.
 
 ---
 
@@ -83,13 +83,13 @@ All 4 architectures (`CNNBaseline`, `LSTMBaseline`, `CNNLSTMStandard`, `Proposed
 ### Tier 2: Live Video & Real-Time Webcam Inference (`src/predict.py` & `app.py`)
 Both the CLI (`src/predict.py`) and Gradio UI (`app.py`) compute calibrated softmax **Top-3 gloss probabilities** and extract **peak temporal self-attention frame indices** (for example, frames `[6..12]` during active gesture strokes on held-out WLASL test clips). In live webcam mode (`--mode webcam`), a 30-frame rolling buffer feeds continuous predictions with confidence scoring (allowing downstream gating at `> 0.75` confidence to separate active signs from an `Idle / No-Sign` state).
 
-### Tier 3: 39-Test Automated Pytest Suite (`tests/test_pipeline.py`)
-All `39` automated unit and integration tests pass across 7 core verification suites:
+### Tier 3: 40-Test Automated Pytest Suite (`tests/test_pipeline.py`)
+All `40` automated unit and integration tests pass across 7 core verification suites:
 1. **Output Shape & Dtype (`TestOutputShape`, 6 tests)** — verifies `(30, 450)` `float32` output across 12-frame, 30-frame, and 75-frame clips with zero `NaN`/`Inf`.
 2. **Edge Cases & Missing Landmarks (`TestEdgeCases` + `TestMissingLandmarks`, 5 tests)** — 0-frame, single-frame, all-black, and mixed frames.
 3. **Velocity, Resampling & Active-Motion Trimming (`TestVelocity` + `TestComputeVelocity` + `TestResample`, 9 tests)** — `vel[0] == 0`, exact finite differences, padding, subsampling, and `trim_active_motion` idle-frame trimming & fallback.
 4. **Body-Centric Normalization (`TestNormalisation`, 5 tests)** — `mid_shoulder` origin, unit `shoulder_width`, `< 1e-6` fallback, body-relative hand offsets, and zero-preservation for undetected hands.
-5. **WLASL-10 Pipeline & Signer Isolation (`TestDatasetWLASL`, 5 tests)** — top-10 selection, `frame_start`/`frame_end` slicing, `.npz` caching, subfolder fallback, 0% signer leakage, train-only augmentation, and isolated `--smoke-test-data`.
+5. **WLASL-10 Pipeline & Signer Isolation (`TestDatasetWLASL`, 6 tests)** — top-10 selection, `frame_start`/`frame_end` slicing, `.npz` caching, subfolder fallback, 0% signer leakage, train-only + horizontal mirror augmentation, and isolated `--smoke-test-data`.
 6. **Model Architectures & Factory (`TestModels`, 5 tests)** — forward shapes, parameter counts, `attention_weights.sum() == 1.0`, and `build_model` factory validation.
 7. **End-to-End Integration & Benchmarking (`TestIntegration`, 4 tests)** — `LandmarkExtractor` → model, 1-epoch train/eval/predict (`CNNBaseline` & `ProposedResCNNBiLSTMAttn`), and full 4-model `train_all_models` + `benchmark_all` CSV/PNG verification.
 
@@ -101,15 +101,15 @@ Exact metrics exported directly from [`results/model_comparison.csv`](results/mo
 
 | Model Name | Top-1 Accuracy | Top-3 Accuracy | Macro Precision | Macro Recall | Macro F1-Score | Weighted F1-Score | Parameter Count | Checkpoint Size (KB) | CPU Latency Mean (ms) | CPU Latency Std (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `CNNBaseline` | 0.2778 (27.78%) | 0.6111 (61.11%) | 0.1500 | 0.3000 | 0.1786 | 0.2103 | 278,410 | 3,282.25 | 0.7900 | 0.1980 |
-| `LSTMBaseline` | **0.3333 (33.33%)** | **0.8889 (88.89%)** | **0.3367** | **0.4750** | **0.3619** | 0.2765 | 1,254,410 | 14,714.77 | 1.8490 | 0.4182 |
-| `CNNLSTMStandard` | **0.3333 (33.33%)** | 0.7222 (72.22%) | 0.2833 | 0.4167 | 0.3133 | 0.2907 | 1,328,010 | 15,590.97 | 1.6433 | 0.4656 |
-| `ProposedResCNNBiLSTMAttn` | **0.3333 (33.33%)** | 0.6667 (66.67%) | 0.1833 | 0.2417 | 0.1810 | **0.3175** | 3,304,586 | 38,804.46 | 5.3638 | 0.9388 |
+| `CNNBaseline` | 0.3333 (33.33%) | 0.6667 (66.67%) | 0.2500 | 0.3917 | 0.2367 | 0.2722 | 278,410 | 3,282.25 | 1.2775 | 0.4062 |
+| `LSTMBaseline` | 0.2778 (27.78%) | 0.7778 (77.78%) | 0.2583 | 0.3583 | 0.2817 | 0.2426 | 1,254,410 | 14,714.77 | 1.8673 | 0.4374 |
+| `CNNLSTMStandard` | **0.4444 (44.44%)** | **0.8333 (83.33%)** | **0.4500** | **0.5500** | **0.4400** | **0.4111** | 1,328,010 | 15,590.97 | 1.5210 | 0.3713 |
+| `ProposedResCNNBiLSTMAttn` | 0.3889 (38.89%) | **0.8333 (83.33%)** | 0.2833 | 0.4833 | 0.3200 | 0.3056 | 3,304,586 | 38,804.46 | 5.7621 | 1.2974 |
 
 ### Key Analytical Takeaways
-- **Sequence Modeling Beats Temporal Pooling**: All three temporal sequence models (`LSTMBaseline`, `CNNLSTMStandard`, `ProposedResCNNBiLSTMAttn`) reach **33.33% Top-1 Accuracy** on completely unseen signers, outperforming `CNNBaseline` (`27.78%` Top-1, `61.11%` Top-3, `0.2103` Weighted F1) whose global temporal pooling discards directional ordering.
-- **`ProposedResCNNBiLSTMAttn` Leads in Weighted F1 (`0.3175`) + Interpretability**: Achieving the highest **Weighted F1 (`0.3175`)** across all four architectures (`+0.0268` over `CNNLSTMStandard`, `+0.0410` over `LSTMBaseline`, `+0.1072` over `CNNBaseline`) alongside `66.67%` Top-3 accuracy (`before` F1 = `0.8571`, `who` F1 = `0.6667`), the proposed architecture also outputs 30-frame self-attention weights pinpointing the active gesture stroke. On sparse 1-support classes (`cousin`, `go`), `LSTMBaseline` reaches higher Macro F1 (`0.3619`) and `88.89%` Top-3 ranking accuracy.
-- **Real-time CPU feasibility**: At `5.36 ms` mean CPU latency (`0.94 ms` std) per sequence (`~186` forward passes/sec at `batch_size=1`), `ProposedResCNNBiLSTMAttn` runs interactively on CPU without requiring a GPU.
+- **Balanced Checkpoint Selection & Mirror Invariance Boost Sequence Generalization**: Combining horizontal left/right mirror invariance (`mirror_prob=0.5`), `batch_size=16`, and class-balanced validation loss selection raises `ProposedResCNNBiLSTMAttn` from `33.33%` to **`38.89%` Top-1** and **`83.33%` Top-3** (`0.3200` Macro F1, `thin` F1 = `1.00`), while `CNNLSTMStandard` reaches **`44.44%` Top-1** and **`83.33%` Top-3** (`0.4400` Macro F1)—both outperforming `CNNBaseline` (`33.33%` Top-1, `66.67%` Top-3) and `LSTMBaseline` (`27.78%` Top-1).
+- **Interpretability & All-10 Gloss Coverage**: Unlike earlier unweighted-loss runs that collapsed toward frequent validation classes (`cool`/`computer`), `ProposedResCNNBiLSTMAttn` predicts all 10 glosses cleanly (`20 / 20` verified `.mp4` matches across all 10 words via `build_demo_videos.py`, including `tall` and `thin`) and surfaces 30-frame temporal attention weights.
+- **Real-time CPU feasibility**: At `5.76 ms` mean CPU latency (`1.30 ms` std) per sequence (`~173` forward passes/sec at `batch_size=1`), `ProposedResCNNBiLSTMAttn` runs interactively on CPU without requiring a GPU.
 
 ### Benchmark & Interpretability Visualizations
 
@@ -204,8 +204,8 @@ python -m src.evaluate --config config.yaml --data data/wlasl10_landmarks.npz --
 
 ## ⚠️ Honest Limitations & Future Roadmap
 
-- **Small-Sample Sparsity on Unseen Signers**: Even among the top-10 most populated WLASL glosses, only `147` clips are available (`13–16` per gloss). Under strict signer-disjoint splitting (`103` train / `26` val / `18` test), several test classes have only `support=1` or `2` from completely unseen signers (see [`results/per_class_metrics.csv`](results/per_class_metrics.csv)), causing `0.0` F1 on sparse classes and limiting Macro F1 (`0.1810`) despite `66.67%` Top-3 ranking accuracy.
-- **Model Footprint vs. Baseline Speed**: `ProposedResCNNBiLSTMAttn` runs in `5.36 ms` mean CPU latency (`0.94 ms` std) and stores `3.30M` parameters (`38.8 MB`), versus `0.79–1.85 ms` (`0.28M–1.33M` parameters) for the lighter baselines.
+- **Small-Sample Sparsity on Unseen Signers**: Even among the top-10 most populated WLASL glosses, only `147` clips are available (`13–16` per gloss). Under strict signer-disjoint splitting (`103` train / `26` val / `18` test), several test classes have only `support=1` or `2` from completely unseen signers (see [`results/per_class_metrics.csv`](results/per_class_metrics.csv)), limiting Macro F1 (`0.3200`) despite `83.33%` Top-3 ranking accuracy on `ProposedResCNNBiLSTMAttn`.
+- **Model Footprint vs. Baseline Speed**: `ProposedResCNNBiLSTMAttn` runs in `5.76 ms` mean CPU latency (`1.30 ms` std) and stores `3.30M` parameters (`38.8 MB`), versus `1.28–1.87 ms` (`0.28M–1.33M` parameters) for the lighter baselines.
 - **Future Roadmap**:
   - Scale training to **WLASL-100 / MS-ASL / AUTSL** with self-supervised pose pretraining to boost unseen-signer Top-1 generalization.
   - Export `ProposedResCNNBiLSTMAttn` to **ONNX / TorchScript** for cross-platform edge deployment without a PyTorch runtime.

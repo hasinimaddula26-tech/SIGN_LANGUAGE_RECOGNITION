@@ -132,8 +132,23 @@ class Trainer:
             eta_min=1e-6,
         )
 
+        # Inverse-frequency class weights on validation labels prevent majority
+        # val classes (e.g. cool/computer) from dominating early checkpoint selection.
+        num_classes = int(self.config.get("num_classes", 10))
+        val_labels: List[int] = []
+        for _, yb in self.val_loader:
+            val_labels.extend(yb.tolist())
+        if val_labels:
+            counts = np.bincount(np.asarray(val_labels, dtype=np.int64), minlength=num_classes)
+            inv = np.where(counts > 0, 1.0 / np.maximum(counts, 1), 0.0)
+            if inv.sum() > 0:
+                inv = inv / inv[counts > 0].mean()
+            self.val_class_weights = torch.tensor(inv, dtype=torch.float32, device=self.device)
+        else:
+            self.val_class_weights = torch.ones(num_classes, dtype=torch.float32, device=self.device)
+
         self.num_epochs     = self.config.get("num_epochs", 50)
-        self.patience       = self.config.get("early_stopping_patience", 10)
+        self.patience       = self.config.get("early_stopping_patience", 15)
         self.grad_clip      = self.config.get("grad_clip", 1.0)
 
         self.best_val_loss  = float("inf")
@@ -156,6 +171,8 @@ class Trainer:
         ctx = torch.enable_grad() if training else torch.no_grad()
         with ctx:
             for x, y in tqdm(loader, desc="train" if training else "val", leave=False):
+                if training and x.size(0) < 2:
+                    continue
                 x, y = x.to(self.device), y.to(self.device)
 
                 if training:
@@ -163,7 +180,12 @@ class Trainer:
 
                 out = self.model(x)
                 logits = out[0] if isinstance(out, tuple) else out
-                loss   = self.criterion(logits, y)
+                if training:
+                    loss = self.criterion(logits, y)
+                else:
+                    per_sample = nn.functional.cross_entropy(logits, y, reduction="none")
+                    sample_w = self.val_class_weights[y]
+                    loss = (per_sample * sample_w).mean()
 
                 if training:
                     loss.backward()

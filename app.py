@@ -233,9 +233,10 @@ def predict_video_file(
 
 def predict_webcam_video(
     video_path: Optional[str],
+    flip_horizontal: bool = False,
 ) -> Tuple[str, Dict[str, float], plt.Figure]:
-    """Un-mirror webcam frames and trim idle start/end frames before inference."""
-    return predict_video_file(video_path, flip_horizontal=True, trim_idle=True)
+    """Trim idle start/end frames (with optional horizontal flip) before inference."""
+    return predict_video_file(video_path, flip_horizontal=flip_horizontal, trim_idle=True)
 
 
 # ─── Gradio Blocks UI ────────────────────────────────────────────────────────
@@ -316,9 +317,14 @@ with gr.Blocks(title="WLASL-10 Sign Language Recognition (ResCNN-BiLSTM-Attentio
         with gr.Tab("Webcam Capture"):
             gr.Markdown(
                 "Record a short sign gesture clip directly from your webcam. "
-                "Frames are automatically un-mirrored horizontally (`cv2.flip(frame, 1)`) before MediaPipe extraction to match WLASL camera orientation."
+                "Gradio captures un-mirrored camera frames matching WLASL orientation (`flip_horizontal=False` by default), "
+                "and automatically trims leading/trailing idle frames before 30-frame resampling."
             )
             webcam_video = gr.Video(sources=["webcam"], label="Record Webcam Sign Clip")
+            webcam_flip_cb = gr.Checkbox(
+                value=False,
+                label="Flip Horizontally (check only if your recorded webcam playback appears mirrored)",
+            )
             webcam_btn = gr.Button("Analyze Webcam Recording", variant="primary")
             webcam_status_md = gr.Markdown(value="")
             with gr.Row():
@@ -327,7 +333,7 @@ with gr.Blocks(title="WLASL-10 Sign Language Recognition (ResCNN-BiLSTM-Attentio
 
             webcam_btn.click(
                 fn=predict_webcam_video,
-                inputs=webcam_video,
+                inputs=[webcam_video, webcam_flip_cb],
                 outputs=[webcam_status_md, webcam_label_out, webcam_attn_plot],
             )
 

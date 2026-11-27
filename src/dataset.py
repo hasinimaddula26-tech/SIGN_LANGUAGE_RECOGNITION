@@ -47,12 +47,20 @@ logger = logging.getLogger(__name__)
 
 # ─── Dataset ─────────────────────────────────────────────────────────────────
 
+_POSE_SWAP_PAIRS: Tuple[Tuple[int, int], ...] = (
+    (1, 4), (2, 5), (3, 6), (7, 8), (9, 10), (11, 12),
+    (13, 14), (15, 16), (17, 18), (19, 20), (21, 22),
+    (23, 24), (25, 26), (27, 28), (29, 30), (31, 32),
+)
+
+
 class SignLanguageDataset(Dataset):
     """PyTorch Dataset supporting cached in-memory arrays or .npy file paths.
 
-    Realistic kinematic augmentation (temporal speed resampling ±15% and
-    Gaussian joint jitter std=0.01) is applied ONLY when ``augment=True``
-    (training split only — never validation or test).
+    Realistic kinematic & domain-shift augmentation (temporal crop, speed
+    resampling ±15%, horizontal left/right mirroring, spatial scale/shift
+    jitter, and Gaussian joint noise std=0.015) is applied ONLY when
+    ``augment=True`` (training split only — never validation or test).
     """
 
     def __init__(
@@ -67,6 +75,7 @@ class SignLanguageDataset(Dataset):
         crop_range: Tuple[float, float] = (0.80, 1.00),
         scale_range: Tuple[float, float] = (0.90, 1.10),
         shift_range: Tuple[float, float] = (-0.03, 0.03),
+        mirror_prob: float = 0.5,
         seed: Optional[int] = None,
     ) -> None:
         if X is not None and y is not None:
@@ -89,6 +98,7 @@ class SignLanguageDataset(Dataset):
         self.crop_range = crop_range
         self.scale_range = scale_range
         self.shift_range = shift_range
+        self.mirror_prob = mirror_prob
         self._rng = np.random.default_rng(seed)
 
     def __len__(self) -> int:
@@ -111,6 +121,7 @@ class SignLanguageDataset(Dataset):
                 crop_range=self.crop_range,
                 scale_range=self.scale_range,
                 shift_range=self.shift_range,
+                mirror_prob=self.mirror_prob,
             )
 
         x = torch.from_numpy(np.ascontiguousarray(feat, dtype=np.float32))
@@ -128,14 +139,16 @@ class SignLanguageDataset(Dataset):
         crop_range: Tuple[float, float] = (0.80, 1.00),
         scale_range: Tuple[float, float] = (0.90, 1.10),
         shift_range: Tuple[float, float] = (-0.03, 0.03),
+        mirror_prob: float = 0.5,
     ) -> np.ndarray:
         """Apply webcam-robust temporal + spatial augmentations to training clips.
 
         1. Random temporal crop (80%–100% contiguous window) resampled back to T.
         2. Random temporal speed resampling (±15%).
-        3. Random spatial scale jitter (0.90x–1.10x) & shoulder-center shift (±0.03).
-        4. Gaussian joint jitter (std=0.015) on detected (non-zero) joints.
-        5. Recompute consistent velocity ``vel = Δcoords`` (with ``vel[0] = 0``).
+        3. Random horizontal left/right mirroring (negates x, swaps L/R pose & hands).
+        4. Random spatial scale jitter (0.90x–1.10x) & shoulder-center shift (±0.03).
+        5. Gaussian joint jitter (std=0.015) on detected (non-zero) joints.
+        6. Recompute consistent velocity ``vel = Δcoords`` (with ``vel[0] = 0``).
         """
         if rng is None:
             rng = np.random.default_rng()
@@ -168,7 +181,19 @@ class SignLanguageDataset(Dataset):
                 warped[:, col] = np.interp(dst_t, src_t, coords[:, col])
             coords = _resample(warped, target=T)
 
-        # 3. Spatial scale jitter (0.90x–1.10x), shoulder-center shift (±0.03), & joint noise
+        # 3. Horizontal mirror invariance (negate x, swap symmetric L/R pose + L/R hands)
+        if mirror_prob > 0.0 and rng.random() < mirror_prob and n_coords == N_COORDS:
+            kp_m = coords.reshape(T, 75, 3)
+            det_m = np.any(kp_m != 0.0, axis=-1)
+            kp_m[:, :, 0] = np.where(det_m, -kp_m[:, :, 0], 0.0)
+            for idx_l, idx_r in _POSE_SWAP_PAIRS:
+                kp_m[:, [idx_l, idx_r]] = kp_m[:, [idx_r, idx_l]]
+            left_hand = kp_m[:, 33:54].copy()
+            kp_m[:, 33:54] = kp_m[:, 54:75]
+            kp_m[:, 54:75] = left_hand
+            coords = kp_m.reshape(T, n_coords)
+
+        # 4. Spatial scale jitter (0.90x–1.10x), shoulder-center shift (±0.03), & joint noise
         scale = float(rng.uniform(scale_range[0], scale_range[1]))
         shift = rng.uniform(shift_range[0], shift_range[1], size=(1, 1, 3)).astype(np.float32)
         if n_coords % 3 == 0:
