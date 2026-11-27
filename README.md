@@ -5,13 +5,36 @@
 [![MediaPipe 0.10.14](https://img.shields.io/badge/MediaPipe-0.10.14-0097A7?logo=google&logoColor=white)](https://developers.google.com/mediapipe)
 [![Pytest 40/40 Passing](https://img.shields.io/badge/Pytest-40%2F40%20Passing-2EA44F?logo=pytest&logoColor=white)](tests/test_pipeline.py)
 [![Dataset WLASL-10 Signer-Disjoint](https://img.shields.io/badge/Dataset-WLASL--10%20Signer--Disjoint-6366F1)](data/WLASL_v0.3.json)
-[![Gradio Demo](https://img.shields.io/badge/Gradio-Web%20Demo-F97316?logo=gradio&logoColor=white)](https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION)
-[![Watch Demo Video](https://img.shields.io/badge/Video-Live%20Demo%20(3m%2042s)-DC2626?logo=youtube&logoColor=white)](assets/live_demo.mp4)
+[![Gradio Demo](https://img.shields.io/badge/Hugging%20Face-Live%20Space-F97316?logo=huggingface&logoColor=white)](https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION)
+[![Watch Demo Video](https://img.shields.io/badge/GitHub%20Video-Live%20Demo%20(3m%2042s)-DC2626?logo=github&logoColor=white)](assets/live_demo.mp4)
+[![Full Explanation](https://img.shields.io/badge/Google%20Drive-Full%20Explanation-1D4ED8?logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1vyr0hMO-af0nc2CBmWhlkkB45pceNDmY/view?usp=drivesdk)
 
-> 🎬 **Live End-to-End Video Demo (`Uploaded .mp4` + `Live Webcam Capture`):** [**▶ Watch Live Demo & Walkthrough (`assets/live_demo.mp4`)**](assets/live_demo.mp4)  
-> 🌐 **Interactive Hugging Face Spaces App:** **https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION**
+| Showcase | Direct Link | Highlights |
+|---|---|---|
+| **🌐 Live Interactive App** | [**Open Hugging Face Spaces Demo**](https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION) | Test pre-loaded `.npy` samples, upload `.mp4` clips, or record live webcam |
+| **🎬 Live Demo Video (`3m 42s`)** | [**Watch `assets/live_demo.mp4`**](assets/live_demo.mp4) | Side-by-side live demo of Uploaded `.mp4` vs. Webcam Capture inference |
+| **🎥 Full Project Walkthrough** | [**Watch Complete Explanation on Google Drive**](https://drive.google.com/file/d/1vyr0hMO-af0nc2CBmWhlkkB45pceNDmY/view?usp=drivesdk) | End-to-end explanation of dataset, model architecture, benchmarks & UI |
 
 Dynamic word-level sign language is inherently a spatio-temporal motion problem: words such as `before`, `drink`, and `tall` depend on hand trajectory, velocity, and height relative to the signer's face and torso—cues that static A–Z finger-spelling classifiers discard completely. This repository implements an end-to-end **MediaPipe Holistic + Multi-Scale Residual 1D-CNN + Bidirectional LSTM + Temporal Self-Attention** pipeline trained and benchmarked strictly on **unseen signers** from WLASL v0.3. Everything—from raw `.mp4` landmark extraction and signer-disjoint dataset splitting to 4-model CPU latency benchmarking and an interactive 3-tab Gradio web application—is reproducible from a single repository.
+
+---
+
+## 🎬 Supported 10 WLASL Reference Signs & Visual Preview Guide
+
+Every supported gloss includes a verified H.264 `.mp4` clip in [`reference_videos/`](reference_videos/) (also interactive inside the Hugging Face Space) so visitors can preview exact handshape, position, and timing before testing:
+
+| Gloss | Reference Video Clip | Verified Prediction | How to Perform the Gesture |
+|---|---|---|---|
+| **`before`** | [`▶ Watch before.mp4`](reference_videos/before.mp4) | `BEFORE` (`94.7%`) | Hold non-dominant flat hand upright; place dominant flat hand in front and pull it backward toward chest. |
+| **`computer`** | [`▶ Watch computer.mp4`](reference_videos/computer.mp4) | `COMPUTER` (`99.1%`) | Form a **`C`** handshape with dominant hand and arc it up onto the forearm of your bent non-dominant arm. |
+| **`cool`** | [`▶ Watch cool.mp4`](reference_videos/cool.mp4) | `COOL` (`97.6%`) | Place thumbs of both open **`5`** hands near cheeks/jawline and wiggle fingers outward slightly. |
+| **`cousin`** | [`▶ Watch cousin.mp4`](reference_videos/cousin.mp4) | `COUSIN` (`78.9%`) | Form a **`C`** handshape near the side of forehead/temple and twist gently forward and back. |
+| **`drink`** | [`▶ Watch drink.mp4`](reference_videos/drink.mp4) | `DRINK` (`88.1%`) | Form a **`C`** handshape (like holding a cup) and tilt it up toward your mouth as if taking a sip. |
+| **`go`** | [`▶ Watch go.mp4`](reference_videos/go.mp4) | `GO` (`99.2%`) | Point both index fingers (**`1`** handshape) forward at chest level and arc both hands away simultaneously. |
+| **`help`** | [`▶ Watch help.mp4`](reference_videos/help.mp4) | `HELP` (`99.2%`) | Place closed dominant **`A`** fist (thumb up) on flat upward non-dominant palm, then lift both upward together. |
+| **`tall`** | [`▶ Watch tall.mp4`](reference_videos/tall.mp4) | `TALL` (`95.6%`) | Hold non-dominant flat palm vertical in front of you and slide dominant index finger upward past the fingertips. |
+| **`thin`** | [`▶ Watch thin.mp4`](reference_videos/thin.mp4) | `THIN` (`99.2%`) | Touch both extended pinky fingers (**`I`** handshape) tip-to-tip at chest level, then pull apart smoothly. |
+| **`who`** | [`▶ Watch who.mp4`](reference_videos/who.mp4) | `WHO` (`97.8%`) | Touch dominant index finger (**`1`** handshape) or thumb to chin and wiggle the index finger slightly downward/inward. |
 
 ---
 
@@ -138,30 +161,9 @@ Exact metrics exported directly from [`results/model_comparison.csv`](results/mo
 
 ---
 
-## Live Web Demo
+## ⚡ Quick-Start & Deployment Commands
 
-Try the hosted Gradio application directly in your browser on Hugging Face Spaces (ZeroGPU):
-
-👉 **https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION**
-
-[`app.py`](app.py) exposes an interactive **Visual 10-Sign Video Reference Guide** (`reference_videos/*.mp4`) alongside a 3-tab Gradio interface (`Test Pre-Loaded Samples`, `Upload .mp4 Video` with 1-click reference examples, and `Webcam Capture` with active-motion trimming) returning Top-3 predicted glosses, out-of-vocabulary confidence gating (`threshold = 0.50`), and a 30-frame Temporal Attention bar chart highlighting the top-5 active gesture frames.
-
-### 🎬 Supported 10 WLASL Reference Signs & Visual Preview Guide
-
-Just like the interactive Reference Guide inside the Gradio & Hugging Face Space app, every supported sign includes a verified H.264 `.mp4` demonstration clip so visitors can watch the exact handshape, position, and timing before testing:
-
-| Gloss | Reference Video Clip | Verified Prediction | How to Perform the Gesture |
-|---|---|---|---|
-| **`before`** | [`▶ Watch before.mp4`](reference_videos/before.mp4) | `BEFORE` (`94.7%`) | Hold non-dominant flat hand upright; place dominant flat hand in front and pull it backward toward chest. |
-| **`computer`** | [`▶ Watch computer.mp4`](reference_videos/computer.mp4) | `COMPUTER` (`99.1%`) | Form a **`C`** handshape with dominant hand and arc it up onto the forearm of your bent non-dominant arm. |
-| **`cool`** | [`▶ Watch cool.mp4`](reference_videos/cool.mp4) | `COOL` (`97.6%`) | Place thumbs of both open **`5`** hands near cheeks/jawline and wiggle fingers outward slightly. |
-| **`cousin`** | [`▶ Watch cousin.mp4`](reference_videos/cousin.mp4) | `COUSIN` (`78.9%`) | Form a **`C`** handshape near the side of forehead/temple and twist gently forward and back. |
-| **`drink`** | [`▶ Watch drink.mp4`](reference_videos/drink.mp4) | `DRINK` (`88.1%`) | Form a **`C`** handshape (like holding a cup) and tilt it up toward your mouth as if taking a sip. |
-| **`go`** | [`▶ Watch go.mp4`](reference_videos/go.mp4) | `GO` (`99.2%`) | Point both index fingers (**`1`** handshape) forward at chest level and arc both hands away simultaneously. |
-| **`help`** | [`▶ Watch help.mp4`](reference_videos/help.mp4) | `HELP` (`99.2%`) | Place closed dominant **`A`** fist (thumb up) on flat upward non-dominant palm, then lift both upward together. |
-| **`tall`** | [`▶ Watch tall.mp4`](reference_videos/tall.mp4) | `TALL` (`95.6%`) | Hold non-dominant flat palm vertical in front of you and slide dominant index finger upward past the fingertips. |
-| **`thin`** | [`▶ Watch thin.mp4`](reference_videos/thin.mp4) | `THIN` (`99.2%`) | Touch both extended pinky fingers (**`I`** handshape) tip-to-tip at chest level, then pull apart smoothly. |
-| **`who`** | [`▶ Watch who.mp4`](reference_videos/who.mp4) | `WHO` (`97.8%`) | Touch dominant index finger (**`1`** handshape) or thumb to chin and wiggle the index finger slightly downward/inward. |
+[`app.py`](app.py) exposes the interactive **Visual 10-Sign Video Reference Guide** (`reference_videos/*.mp4`) alongside a 3-tab Gradio interface (`Test Pre-Loaded Samples`, `Upload .mp4 Video` with 1-click reference examples, and `Webcam Capture` with active-motion trimming), out-of-vocabulary confidence gating (`threshold = 0.50`), and 30-frame Temporal Attention charts.
 
 ### Launch Gradio Web App Locally
 
