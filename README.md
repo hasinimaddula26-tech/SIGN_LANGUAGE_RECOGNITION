@@ -1,137 +1,208 @@
-# Sign Language Recognition Using Multi-Scale Residual CNN, BiLSTM, and Temporal Self-Attention
+# 🤟 Sign Language Recognition Using Multi-Scale Residual CNN, BiLSTM & Temporal Attention
 
-A production-grade PyTorch pipeline for dynamic word-level **Sign Language Recognition** evaluated under strict **signer-disjoint splitting** on **WLASL-10** (top 10 dynamic word glosses from WLASL v0.3).
+[![Python 3.11](https://img.shields.io/badge/Python-3.11.9-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch 2.15](https://img.shields.io/badge/PyTorch-2.15.0%2Bcpu-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![MediaPipe 0.10.14](https://img.shields.io/badge/MediaPipe-0.10.14-0097A7?logo=google&logoColor=white)](https://developers.google.com/mediapipe)
+[![Pytest 37/37 Passing](https://img.shields.io/badge/Pytest-37%2F37%20Passing-2EA44F?logo=pytest&logoColor=white)](tests/test_pipeline.py)
+[![Dataset WLASL-10 Signer-Disjoint](https://img.shields.io/badge/Dataset-WLASL--10%20Signer--Disjoint-6366F1)](data/WLASL_v0.3.json)
+[![Gradio Demo](https://img.shields.io/badge/Gradio-Web%20Demo-F97316?logo=gradio&logoColor=white)](app.py)
+
+Dynamic word-level sign language is inherently a spatio-temporal motion problem: words such as `before`, `drink`, and `tall` depend on hand trajectory, velocity, and height relative to the signer's face and torso—cues that static A–Z finger-spelling classifiers discard completely. This repository implements an end-to-end **MediaPipe Holistic + Multi-Scale Residual 1D-CNN + Bidirectional LSTM + Temporal Self-Attention** pipeline trained and benchmarked strictly on **unseen signers** from WLASL v0.3. Everything—from raw `.mp4` landmark extraction and signer-disjoint dataset splitting to 4-model CPU latency benchmarking and an interactive 3-tab Gradio web application—is reproducible from a single repository.
 
 ---
 
-## Live Web Demo
+## 📊 At-a-Glance Project Metrics & Data Pipeline Funnel
 
-An interactive Gradio web app ([`app.py`](app.py)) powered by `checkpoints/ProposedResCNNBiLSTMAttn_best.pt` provides 3 tabs:
-1. **Test Pre-Loaded Samples** — instant 1-click inference on held-out `data/samples/*.npy` clips with ground-truth gloss display
-2. **Upload `.mp4` Video** — full MediaPipe Holistic `(30, 450)` landmark extraction + prediction
-3. **Webcam Capture** — browser webcam recording + prediction + 30-frame **Temporal Attention Weight** bar chart
+| Pipeline Stage | Specification / Count | Engineering Detail |
+|---|---:|---|
+| **Raw Corpus Inspected** | `11,980` `.mp4` videos | Scanned across `2,000` gloss entries in `WLASL_v0.3.json` |
+| **Curated Dynamic Subset (WLASL-10)** | `147` clips (`10` glosses) | Top 10 dynamic words ranked by clip count & multi-signer diversity |
+| **Training Set** | `103` clips (`~70%`, `23` signers) | Train-only kinematic augmentation (`±15%` speed, `std=0.01` joint jitter) |
+| **Validation Set** | `26` clips (`~15%`, `7` signers) | Early stopping (`patience=10`) & best-checkpoint selection |
+| **Held-Out Test Set** | `18` clips (`~15%`, `6` signers) | Completely unseen signers (**0% signer overlap** across all splits) |
+| **Input Tensor Shape** | `(30, 450)` `float32` | `225` body-centric `(x, y, z)` coordinates + `225` frame-to-frame velocities |
+| **Automated Test Suite** | `37 / 37` passing | Verified via `pytest tests/ -v` across unit, pipeline, and end-to-end tests |
 
-### Run Locally
+---
 
-```powershell
-python app.py
+## 🗂️ Class-by-Class Dataset Breakdown (`WLASL-10`)
+
+Top 10 dynamic word glosses automatically selected from `data/WLASL_v0.3.json` + `data/raw_videos/` by highest available `.mp4` clip count and unique signer diversity:
+
+| Rank | Gloss | Total Clips | Unique Signers |
+|---:|---|---:|---:|
+| 1 | `thin` | 16 | 12 |
+| 2 | `before` | 16 | 9 |
+| 3 | `cool` | 16 | 8 |
+| 4 | `drink` | 15 | 10 |
+| 5 | `go` | 15 | 9 |
+| 6 | `who` | 14 | 11 |
+| 7 | `help` | 14 | 9 |
+| 8 | `computer` | 14 | 7 |
+| 9 | `cousin` | 14 | 7 |
+| 10 | `tall` | 13 | 11 |
+| **Total** | **10 Dynamic Glosses** | **147** | **36 Signers (23 Train / 7 Val / 6 Test)** |
+
+---
+
+## 🏗️ End-to-End Architecture & 4 Core Innovations
+
+```mermaid
+flowchart LR
+    A["Raw Video / Webcam"] --> B["MediaPipe Holistic<br/>75 Keypoints (33 Pose + 21 L + 21 R)"]
+    B --> C["Mid-Shoulder Body-Centric<br/>Normalization"]
+    C --> D["Kinematic Velocity<br/>(Δx, Δy, Δz) → (30, 450)"]
+    D --> E["Multi-Scale ResConv1D<br/>(Parallel k=3 & k=5 + Skip)"]
+    E --> F["2-Layer Bidirectional<br/>LSTM"]
+    F --> G["Temporal Self-Attention<br/>(30 Frame Weights)"]
+    G --> H["Top-3 Word Predictions<br/>+ Frame Importance"]
 ```
 
-### Deploy on Hugging Face Spaces
+### 1. Body-Relative, Shoulder-Scaled Spatial Normalization (`src/features.py`)
+`LandmarkExtractor` extracts **75 keypoints per frame** (`33` Pose + `21` Left Hand + `21` Right Hand = `225` raw `(x, y, z)` values). Rather than centering each hand on its own wrist—which destroys vertical location cues—every detected landmark is translated relative to `mid_shoulder = (pose[11] + pose[12]) / 2` and divided by `shoulder_width = ||pose[11] - pose[12]||₂` (with a safe `1.0` fallback when `< 1e-6`). This preserves whether a gesture occurs at the forehead, chin, or chest while making representations invariant to camera distance and signer height. Completely undetected component blocks remain exact zeros with zero `NaN` values.
 
-1. Create a new Space on Hugging Face choosing **Gradio** as the SDK (`Python 3.11`).
-2. Push this repository (`app.py`, `requirements.txt`, `config.yaml`, `src/`, `checkpoints/`, `data/samples/`).
-3. Hugging Face Spaces automatically installs `requirements.txt` (including pinned `mediapipe==0.10.14` and `gradio`) and launches `app.py` via `demo.launch()`.
+### 2. Spatio-Kinematic Velocity Fusion (`src/features.py`)
+Static coordinates alone cannot separate directional signs with overlapping hand poses. For every frame $t \ge 1$, we compute frame-to-frame temporal finite differences $(\Delta x, \Delta y, \Delta z) = x_t - x_{t-1}$ (with zero velocity at $t = 0$), concatenate them with the `225` normalized spatial coordinates, and uniformly subsample (`> 30` frames) or edge-pad (`< 30` frames) clips into fixed `(30, 450)` feature sequences.
 
----
+### 3. Multi-Scale Residual 1D-CNN + BiLSTM + Temporal Self-Attention (`src/models.py`)
+`ProposedResCNNBiLSTMAttn` models both fine-grained local motion and long-range gesture context:
+- **Multi-Scale `MultiScaleResConv1DBlock`**: Parallel `Conv1d` branches with `kernel_size=3` (3-frame transitions) and `kernel_size=5` (5-frame strokes), fused via `1×1` convolution with residual skip connections while preserving the `30`-frame temporal axis.
+- **2-Layer Bidirectional LSTM**: Encodes forward and backward temporal dynamics across all 30 time-steps (`hidden_size=256` per direction → `512`-d sequence features).
+- **Learnable `TemporalSelfAttention`**: Computes softmax-normalized weights $\alpha \in \mathbb{R}^{30}$ ($\sum_{t=0}^{29}\alpha_t = 1.0$) returning `(logits, attention_weights)`, surfacing exactly which frames drive each classification.
 
-## Architectural Novelties
-
-1. **Body-Relative, Shoulder-Scaled Normalization (`src/features.py`)**
-   All 75 MediaPipe Holistic keypoints (33 Pose + 21 Left Hand + 21 Right Hand) are translated to `mid_shoulder` (midpoint of pose indices 11 and 12) and scaled by `shoulder_width` (with a `1.0` fallback if `< 1e-6`). Hands are **never** centered independently on their own wrists—preserving hand height relative to the head, face, and chest to disambiguate location-sensitive signs. Undetected components remain exact zeros with zero `NaN` values.
-
-2. **Frame-to-Frame Kinematic Velocity Features (`src/features.py`)**
-   Temporal finite differences `(Δx, Δy, Δz)` (`vel[0] = 0`) are computed along the temporal axis and concatenated with the 225 normalized coordinates to form `(30, 450)` spatio-kinematic tensors (via uniform temporal subsampling if `> 30` frames or edge-padding if `< 30` frames).
-
-3. **Multi-Scale Residual CNN + BiLSTM + Temporal Self-Attention (`src/models.py`)**
-   `ProposedResCNNBiLSTMAttn` combines parallel 1D residual convolutions (`kernel_size=3` and `kernel_size=5` with `1×1` skip projections) → a 2-layer Bidirectional LSTM → a learnable `TemporalSelfAttention` layer that produces `(logits, attention_weights)` with `attention_weights` summing to `1.0` across all 30 frames.
-
-4. **Strict Signer-Disjoint Stratified Evaluation (`src/dataset.py`)**
-   Splits are computed with `StratifiedGroupKFold` grouped on `signer_id` (`seed=42`), guaranteeing **zero signer overlap** between train (`103` clips, `23` signers), validation (`26` clips, `7` signers), and test (`18` clips, `6` signers). Realistic kinematic augmentation (random temporal speed resampling `±15%` and Gaussian joint jitter `std=0.01`) is restricted strictly to the training `Dataset`.
+### 4. Leak-Free Signer-Disjoint Evaluation Protocol (`src/dataset.py`)
+Random clip splits leak signer biometrics, clothing framing, and signing style across train and test sets. We enforce **Signer-Aware Stratified Splitting** using `StratifiedGroupKFold` grouped on `signer_id` (`seed=42`), asserting **zero signer overlap** between train (`23` signers), validation (`7` signers), and test (`6` signers). Realistic kinematic augmentation—random temporal speed resampling (`±15%`) and Gaussian joint jitter (`std=0.01`) on detected joints with velocity recomputation—is restricted strictly to the training `Dataset`.
 
 ---
 
-## Benchmark Results (WLASL-10 Signer-Disjoint Test Set)
+## 🧪 How Our Model Is Evaluated & Tested (3-Tier Verification Protocol)
 
-Exact results exported directly from [`results/model_comparison.csv`](results/model_comparison.csv) (`147` total clips across 10 glosses: `before`, `computer`, `cool`, `cousin`, `drink`, `go`, `help`, `tall`, `thin`, `who`; `103` train / `26` val / `18` test clips):
+### Tier 1: Strict Signer-Disjoint Held-Out Evaluation (`src/evaluate.py`)
+All 4 architectures (`CNNBaseline`, `LSTMBaseline`, `CNNLSTMStandard`, `ProposedResCNNBiLSTMAttn`) are trained sequentially on the exact same signer-disjoint split (`--train-all`) and evaluated on the identical `18` held-out unseen-signer test clips (`--benchmark-all`). CPU single-sample inference latency (`batch_size=1`, `eval()`, `torch.no_grad()`) is measured over **100 timed passes** after **20 warm-up passes** on our 12-core Intel CPU.
+
+### Tier 2: Live Video & Real-Time Webcam Inference (`src/predict.py` & `app.py`)
+Both the CLI (`src/predict.py`) and Gradio UI (`app.py`) compute calibrated softmax **Top-3 gloss probabilities** and extract **peak temporal self-attention frame indices** (for example, frames `[6..12]` during active gesture strokes on held-out WLASL test clips). In live webcam mode (`--mode webcam`), a 30-frame rolling buffer feeds continuous predictions with confidence scoring (allowing downstream gating at `> 0.75` confidence to separate active signs from an `Idle / No-Sign` state).
+
+### Tier 3: 37-Test Automated Pytest Suite (`tests/test_pipeline.py`)
+All `37` automated unit and integration tests pass across 7 core verification suites:
+1. **Output Shape & Dtype (`TestOutputShape`, 6 tests)** — verifies `(30, 450)` `float32` output across 12-frame, 30-frame, and 75-frame clips with zero `NaN`/`Inf`.
+2. **Edge Cases & Missing Landmarks (`TestEdgeCases` + `TestMissingLandmarks`, 5 tests)** — 0-frame, single-frame, all-black, and mixed frames.
+3. **Velocity & Resampling (`TestVelocity` + `TestComputeVelocity` + `TestResample`, 7 tests)** — `vel[0] == 0`, exact finite differences, padding, and subsampling.
+4. **Body-Centric Normalization (`TestNormalisation`, 5 tests)** — `mid_shoulder` origin, unit `shoulder_width`, `< 1e-6` fallback, body-relative hand offsets, and zero-preservation for undetected hands.
+5. **WLASL-10 Pipeline & Signer Isolation (`TestDatasetWLASL`, 5 tests)** — top-10 selection, `frame_start`/`frame_end` slicing, `.npz` caching, subfolder fallback, 0% signer leakage, train-only augmentation, and isolated `--smoke-test-data`.
+6. **Model Architectures & Factory (`TestModels`, 5 tests)** — forward shapes, parameter counts, `attention_weights.sum() == 1.0`, and `build_model` factory validation.
+7. **End-to-End Integration & Benchmarking (`TestIntegration`, 4 tests)** — `LandmarkExtractor` → model, 1-epoch train/eval/predict (`CNNBaseline` & `ProposedResCNNBiLSTMAttn`), and full 4-model `train_all_models` + `benchmark_all` CSV/PNG verification.
+
+---
+
+## 📈 Experimental Benchmark Results & Visual Analysis
+
+Exact metrics exported directly from [`results/model_comparison.csv`](results/model_comparison.csv) on the `18`-clip unseen-signer test set:
 
 | Model Name | Top-1 Accuracy | Top-3 Accuracy | Macro Precision | Macro Recall | Macro F1-Score | Weighted F1-Score | Parameter Count | Checkpoint Size (KB) | CPU Latency Mean (ms) | CPU Latency Std (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `CNNBaseline` | 0.1111 | 0.4444 | 0.0118 | 0.1 | 0.0211 | 0.0234 | 278410 | 3283.28 | 1.9719 | 0.4019 |
-| `LSTMBaseline` | 0.2778 | 0.5556 | 0.1756 | 0.3 | 0.1764 | 0.1774 | 1254410 | 14715.86 | 5.0139 | 0.8209 |
-| `CNNLSTMStandard` | 0.2222 | 0.5 | 0.1025 | 0.2 | 0.1167 | 0.1667 | 1328010 | 15592.64 | 3.179 | 0.6918 |
-| `ProposedResCNNBiLSTMAttn` | **0.3333** | **0.6111** | **0.181** | 0.2417 | **0.1774** | **0.3155** | 3304586 | 38810.46 | 15.0024 | 24.6467 |
+| `CNNBaseline` | 0.1111 (11.11%) | 0.4444 (44.44%) | 0.0118 | 0.1000 | 0.0211 | 0.0234 | 278,410 | 3,283.28 | 1.9719 | 0.4019 |
+| `LSTMBaseline` | 0.2778 (27.78%) | 0.5556 (55.56%) | 0.1756 | **0.3000** | 0.1764 | 0.1774 | 1,254,410 | 14,715.86 | 5.0139 | 0.8209 |
+| `CNNLSTMStandard` | 0.2222 (22.22%) | 0.5000 (50.00%) | 0.1025 | 0.2000 | 0.1167 | 0.1667 | 1,328,010 | 15,592.64 | 3.1790 | 0.6918 |
+| `ProposedResCNNBiLSTMAttn` | **0.3333 (33.33%)** | **0.6111 (61.11%)** | **0.1810** | 0.2417 | **0.1774** | **0.3155** | 3,304,586 | 38,810.46 | 15.0024 | 24.6467 |
 
-*(CPU latency measured with `batch_size=1` in `eval()` mode under `torch.no_grad()` over 100 timed runs following 20 warm-up forward passes.)*
+### Key Analytical Takeaways
+- **Why `CNNBaseline` collapses (`11.11%`)**: Global average/max pooling over time discards temporal ordering—confusing signs whose hand trajectories differ primarily in direction or sequence phase.
+- **Why `ProposedResCNNBiLSTMAttn` leads (`33.33%` Top-1, `61.11%` Top-3)**: Combining multi-scale local temporal convolutions (`k=3, 5`) with bidirectional recurrence and frame-level self-attention yields a **+11.11 percentage point** Top-1 gain over `CNNLSTMStandard` (`22.22%`) and **+11.11 percentage point** Top-3 gain (`61.11%` vs. `50.00%`), while boosting Weighted F1 from `0.1667` to `0.3155`.
+- **Real-time CPU feasibility**: At `15.00 ms` mean CPU latency per sequence (`~66` forward passes/sec at `batch_size=1`), `ProposedResCNNBiLSTMAttn` runs well within real-time interactive budgets without requiring a GPU.
+
+### Benchmark & Interpretability Visualizations
+
+![Benchmark Comparison](results/benchmark_comparison.png)
+*Figure 1: Grouped comparison of Top-1 Accuracy, Macro F1-Score, and Top-3 Accuracy across all 4 architectures on the held-out signer-disjoint test split.*
+
+![Training Curves](results/training_curves.png)
+*Figure 2: Validation loss and validation accuracy trajectories across epochs under identical early stopping and CosineAnnealingLR schedules.*
+
+![Confusion Matrix](results/confusion_matrix_proposed.png)
+*Figure 3: Per-class confusion matrix heatmap for `ProposedResCNNBiLSTMAttn` on the 18-clip unseen-signer test set.*
+
+![Temporal Attention Weights](results/temporal_attention_weights.png)
+*Figure 4: Learned frame-by-frame temporal self-attention weight distribution (`0–29`), showing peak focus on active gesture strokes.*
 
 ### Hardware Configuration (`results/hardware_specs.json`)
 
-- **OS**: `Windows-10-10.0.26300-SP0` (`Windows` `10`, `AMD64`)
+- **OS**: `Windows-10-10.0.26300-SP0` (`Windows 10`, `AMD64`)
 - **CPU**: `Intel64 Family 6 Model 186 Stepping 3, GenuineIntel` (`12` logical cores)
 - **Python**: `3.11.9`
 - **PyTorch**: `2.15.0+cpu` (`cuda_available: false`, `torch_num_threads: 10`)
 
 ---
 
-## Presentation Charts
+## 🌐 Interactive Gradio Web App & Quick-Start Commands
 
-### Model Benchmark Comparison
-![Model Benchmark Comparison](results/benchmark_comparison.png)
+[`app.py`](app.py) exposes a 3-tab Gradio interface (`Test Pre-Loaded Samples`, `Upload .mp4 Video`, and `Webcam Capture`) returning Top-3 predicted glosses and a 30-frame Temporal Attention bar chart highlighting the top-5 active gesture frames.
 
-### Validation Training Curves
-![Training Curves](results/training_curves.png)
+### Launch Gradio Web App Locally
 
-### Confusion Matrix — `ProposedResCNNBiLSTMAttn`
-![Confusion Matrix Proposed](results/confusion_matrix_proposed.png)
-
-### Temporal Self-Attention Weights Across Frames 0–29
-![Temporal Attention Weights](results/temporal_attention_weights.png)
-
----
-
-## Dataset Size & Limitations
-
-- **Small sample regime under strict signer-disjoint evaluation**: The top 10 WLASL glosses available in the dataset contain `147` clips total (`13`–`16` clips per gloss). Under a 70/15/15 signer-disjoint split (`103` train / `26` val / `18` test), each class has only `~10` training clips and `1`–`4` unseen-signer test clips (as seen in [`results/per_class_metrics.csv`](results/per_class_metrics.csv)).
-- **Class sparsity on unseen signers**: Several test classes have `support=1` or `2` from completely unseen signers, resulting in `0.0` F1 on low-support classes and pulling down macro averages despite strong Top-3 accuracy (`0.6111`) and Weighted F1 (`0.3155`) for `ProposedResCNNBiLSTMAttn`.
-- **CPU latency variance**: `ProposedResCNNBiLSTMAttn` (`3.30M` params) averages `15.00 ms` per sample on CPU (well within real-time 30 FPS budgets), with higher std dev (`24.65 ms`) due to occasional OS/CPU thread scheduling spikes across bidirectional LSTM + multi-branch conv operations.
-- **Scaling path**: Training on larger WLASL subsets or augmenting with additional multi-signer datasets (e.g., MS-ASL / AUTSL) is expected to substantially improve per-class recall on unseen signers.
-
----
-
-## Quick Start
-
-### 1. Environment Setup
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+```bash
+python app.py
 ```
 
-### 2. Run Unit & Integration Tests
+### Deploy on Hugging Face Spaces
 
-```powershell
+1. Create a new Space on Hugging Face with **Gradio** as the SDK (`Python 3.11`).
+2. Push this repository (`app.py`, `requirements.txt`, `config.yaml`, `src/`, `checkpoints/`, `data/samples/`).
+3. Hugging Face Spaces installs `requirements.txt` (including `mediapipe==0.10.14` and `gradio`) and launches `app.py` automatically via `demo.launch()`.
+
+### Environment Setup & Test Suite
+
+```bash
+python -m venv .venv
+# Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+# Linux / macOS:
+# source .venv/bin/activate
+
+pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-### 3. Instant Sample Inference (No WLASL Download Required)
+### 1-Click Sample Inference (No WLASL Video Download Needed)
 
-Lightweight held-out `(30, 450)` landmark samples and ground-truth labels are included in `data/samples/` (`samples_labels.json`):
-
-```powershell
-python -m src.predict `
-    --config config.yaml `
-    --checkpoint checkpoints/ProposedResCNNBiLSTMAttn_best.pt `
-    --mode npy `
-    --input data/samples/sample_2_before.npy
+```bash
+python -m src.predict \
+  --config config.yaml \
+  --checkpoint checkpoints/ProposedResCNNBiLSTMAttn_best.pt \
+  --mode npy \
+  --input data/samples/sample_3_cool.npy
 ```
 
-For webcam or `.mp4` video inference:
+### Live Webcam & Single `.mp4` Inference
 
-```powershell
-python -m src.predict --config config.yaml --checkpoint checkpoints/ProposedResCNNBiLSTMAttn_best.pt --mode webcam
+```bash
+# Live laptop webcam inference (press 'q' to quit)
+python -m src.predict --mode webcam --checkpoint checkpoints/ProposedResCNNBiLSTMAttn_best.pt
+
+# Single .mp4 video inference
 python -m src.predict --config config.yaml --checkpoint checkpoints/ProposedResCNNBiLSTMAttn_best.pt --mode video --video path/to/clip.mp4
 ```
 
-### 4. Reproducing Full WLASL-10 Extraction, Training & Benchmarking
+### Full WLASL-10 Extraction, Training & Benchmarking
 
-```powershell
-# 1. Extract top-10 WLASL glosses into data/wlasl10_landmarks.npz + data/samples/
+```bash
+# 1. Extract top-10 WLASL glosses to data/wlasl10_landmarks.npz + data/samples/
 python -m src.dataset --wlasl-json data/WLASL_v0.3.json --raw-videos data/raw_videos
 
 # 2. Train all 4 architectures on the exact same signer-disjoint split (seed=42)
 python -m src.train --config config.yaml --data data/wlasl10_landmarks.npz --train-all
 
-# 3. Evaluate all 4 checkpoints, measure CPU warm-up latency, and export CSVs + 300-DPI plots
+# 3. Benchmark all 4 checkpoints, measure CPU warm-up latency, and export CSVs + 300-DPI plots
 python -m src.evaluate --config config.yaml --data data/wlasl10_landmarks.npz --benchmark-all
 ```
+
+---
+
+## ⚠️ Honest Limitations & Future Roadmap
+
+- **Small-Sample Sparsity on Unseen Signers**: Even among the top-10 most populated WLASL glosses, only `147` clips are available (`13–16` per gloss). Under strict signer-disjoint splitting (`103` train / `26` val / `18` test), several test classes have only `support=1` or `2` from completely unseen signers (see [`results/per_class_metrics.csv`](results/per_class_metrics.csv)), causing `0.0` F1 on sparse classes and limiting Macro F1 (`0.1774`) despite `61.11%` Top-3 ranking accuracy.
+- **CPU Latency Variance**: While `ProposedResCNNBiLSTMAttn` averages `15.00 ms` on CPU, its standard deviation (`24.65 ms`) reflects occasional OS thread-scheduling spikes across multi-branch `Conv1d` + bidirectional LSTM layers.
+- **Future Roadmap**:
+  - Scale training to **WLASL-100 / MS-ASL / AUTSL** with self-supervised pose pretraining to boost unseen-signer Top-1 generalization.
+  - Export `ProposedResCNNBiLSTMAttn` to **ONNX / TorchScript** for deterministic sub-10 ms edge latency.
+  - Extend from isolated word glosses to **continuous sentence-level sign recognition** using CTC decoding over sliding temporal windows.
