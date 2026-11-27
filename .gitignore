@@ -12,6 +12,7 @@ __pycache__/
 data/raw_videos/
 data/_staging/
 data/_meta/
+demo_videos/
 
 # Keep results/, checkpoints/, and data/samples/ tracked for reviewers
 !results/
