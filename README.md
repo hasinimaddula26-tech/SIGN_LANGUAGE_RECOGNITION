@@ -4,7 +4,7 @@
 [![PyTorch 2.15](https://img.shields.io/badge/PyTorch-2.15.0%2Bcpu-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![MediaPipe 0.10.14](https://img.shields.io/badge/MediaPipe-0.10.14-0097A7?logo=google&logoColor=white)](https://developers.google.com/mediapipe)
 [![Pytest 40/40 Passing](https://img.shields.io/badge/Pytest-40%2F40%20Passing-2EA44F?logo=pytest&logoColor=white)](tests/test_pipeline.py)
-[![Dataset WLASL-10 Signer-Disjoint](https://img.shields.io/badge/Dataset-WLASL--10%20Signer--Disjoint-6366F1)](data/WLASL_v0.3.json)
+[![Dataset WLASL-10 Signer-Disjoint](https://img.shields.io/badge/Dataset-WLASL--10%20(Kaggle)-6366F1?logo=kaggle&logoColor=white)](https://www.kaggle.com/datasets/nadimsrabon6/wlasl100-video-classification-dataset?resource=download)
 [![Gradio Demo](https://img.shields.io/badge/Hugging%20Face-Live%20Space-F97316?logo=huggingface&logoColor=white)](https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION)
 [![Watch Demo Video](https://img.shields.io/badge/GitHub%20Video-Live%20Demo%20(3m%2042s)-DC2626?logo=github&logoColor=white)](assets/live_demo.mp4)
 [![Full Explanation](https://img.shields.io/badge/Google%20Drive-Full%20Explanation-1D4ED8?logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1vyr0hMO-af0nc2CBmWhlkkB45pceNDmY/view?usp=drivesdk)
@@ -14,6 +14,7 @@
 | **🌐 Live Interactive App** | [**Open Hugging Face Spaces Demo**](https://huggingface.co/spaces/Hasinidurge7/SIGN_LANGUAGE_RECOGNITION) | Test pre-loaded `.npy` samples, upload `.mp4` clips, or record live webcam |
 | **🎬 Live Demo Video (`3m 42s`)** | [**Watch `assets/live_demo.mp4`**](assets/live_demo.mp4) | Side-by-side live demo of Uploaded `.mp4` vs. Webcam Capture inference |
 | **🎥 Full Project Walkthrough** | [**Watch Complete Explanation on Google Drive**](https://drive.google.com/file/d/1vyr0hMO-af0nc2CBmWhlkkB45pceNDmY/view?usp=drivesdk) | End-to-end explanation of dataset, model architecture, benchmarks & UI |
+| **📦 Source Dataset (Kaggle)** | [**WLASL100 Video Classification Dataset**](https://www.kaggle.com/datasets/nadimsrabon6/wlasl100-video-classification-dataset?resource=download) | Raw WLASL `.mp4` corpus & metadata source used to curate WLASL-10 |
 
 Dynamic word-level sign language is inherently a spatio-temporal motion problem: words such as `before`, `drink`, and `tall` depend on hand trajectory, velocity, and height relative to the signer's face and torso—cues that static A–Z finger-spelling classifiers discard completely. This repository implements an end-to-end **MediaPipe Holistic + Multi-Scale Residual 1D-CNN + Bidirectional LSTM + Temporal Self-Attention** pipeline trained and benchmarked strictly on **unseen signers** from WLASL v0.3. Everything—from raw `.mp4` landmark extraction and signer-disjoint dataset splitting to 4-model CPU latency benchmarking and an interactive 3-tab Gradio web application—is reproducible from a single repository.
 
@@ -42,7 +43,7 @@ Every supported gloss includes a verified H.264 `.mp4` clip in [`reference_video
 
 | Pipeline Stage | Specification / Count | Engineering Detail |
 |---|---:|---|
-| **Raw Corpus Inspected** | `11,980` `.mp4` videos | Scanned across `2,000` gloss entries in `WLASL_v0.3.json` |
+| **Raw Corpus Inspected** | `11,980` `.mp4` videos | Scanned across `2,000` gloss entries in `WLASL_v0.3.json` ([Kaggle Dataset](https://www.kaggle.com/datasets/nadimsrabon6/wlasl100-video-classification-dataset?resource=download)) |
 | **Curated Dynamic Subset (WLASL-10)** | `147` clips (`10` glosses) | Top 10 dynamic words ranked by clip count & multi-signer diversity |
 | **Training Set** | `103` clips (`~70%`, `23` signers) | Train-only augmentation (`80%–100%` crop, `0.90–1.10x` scale, `±0.03` shift, `±15%` speed, `0.5` L/R mirror, `std=0.015` jitter) |
 | **Validation Set** | `26` clips (`~15%`, `7` signers) | Class-balanced val loss selection & early stopping (`patience=15`) |
