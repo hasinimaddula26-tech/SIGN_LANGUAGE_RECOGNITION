@@ -1,0 +1,19 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Raw WLASL video clips & temporary staging (too large for GitHub)
+data/raw_videos/
+data/_staging/
+data/_meta/
+
+# Keep results/, checkpoints/, and data/samples/ tracked for reviewers
+!results/
+!checkpoints/
+!data/samples/

@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────
+# Sign Language Recognition – Configuration
+# ─────────────────────────────────────────────────────────────
+
+# Reproducibility
+seed: 42
+
+# ── Feature extraction ───────────────────────────────────────
+sequence_length: 30          # frames per clip after resampling
+num_keypoints: 75            # 33 pose + 21 left-hand + 21 right-hand
+coords_per_keypoint: 3       # x, y, z
+num_coords: 225              # num_keypoints × coords_per_keypoint
+num_velocity: 225            # frame-to-frame delta (same shape)
+num_features: 450            # num_coords + num_velocity  → (30, 450)
+
+# ── Model ────────────────────────────────────────────────────
+model_name: "ProposedResCNNBiLSTMAttn"
+num_classes: 10
+
+# CNN encoder (even channel counts for multi-scale k=3/k=5 split)
+cnn_out_channels: [128, 256]
+cnn_kernel_size: 3
+cnn_dropout: 0.3
+
+# LSTM decoder
+lstm_hidden_size: 256
+lstm_num_layers: 2
+lstm_dropout: 0.3
+fc_dropout: 0.4
+
+# ── Training ─────────────────────────────────────────────────
+batch_size: 32
+learning_rate: 1.0e-3
+weight_decay: 1.0e-4
+num_epochs: 50
+early_stopping_patience: 10
+val_split: 0.15
+test_split: 0.15
+grad_clip: 1.0
+
+# ── Paths ────────────────────────────────────────────────────
+wlasl_json: "data/WLASL_v0.3.json"
+raw_videos_dir: "data/raw_videos"
+cache_path: "data/wlasl10_landmarks.npz"
+data_dir: "data/raw"
+feature_dir: "data/features"
+model_dir: "models"
+log_dir: "logs"

@@ -1,0 +1,35 @@
+[
+  {
+    "file": "sample_1_thin.npy",
+    "ground_truth_gloss": "thin",
+    "class_idx": 8,
+    "signer_id": 13,
+    "video_id": "57942",
+    "shape": [
+      30,
+      450
+    ]
+  },
+  {
+    "file": "sample_2_before.npy",
+    "ground_truth_gloss": "before",
+    "class_idx": 0,
+    "signer_id": 88,
+    "video_id": "65167",
+    "shape": [
+      30,
+      450
+    ]
+  },
+  {
+    "file": "sample_3_cool.npy",
+    "ground_truth_gloss": "cool",
+    "class_idx": 2,
+    "signer_id": 17,
+    "video_id": "13203",
+    "shape": [
+      30,
+      450
+    ]
+  }
+]
