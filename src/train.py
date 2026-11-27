@@ -19,8 +19,10 @@ Usage (command line)
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
+import os
 import random
 import tempfile
 import time
@@ -181,19 +183,29 @@ class Trainer:
 
     def _save_checkpoint(self, epoch: int, val_loss: float) -> Path:
         path = self.out_dir / self.checkpoint_name
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_name": self.model.__class__.__name__,
-                "model_state_dict": self.model.state_dict(),
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "val_loss": val_loss,
-                "config": self.config,
-                "idx_to_label": self.idx_to_label,
-                "label_to_idx": self.label_to_idx,
-            },
-            path,
-        )
+        payload = {
+            "epoch": epoch,
+            "model_name": self.model.__class__.__name__,
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "val_loss": val_loss,
+            "config": self.config,
+            "idx_to_label": self.idx_to_label,
+            "label_to_idx": self.label_to_idx,
+        }
+        buf = io.BytesIO()
+        torch.save(payload, buf)
+        data = buf.getvalue()
+        tmp_path = path.with_suffix(f".tmp.{os.getpid()}")
+        for attempt in range(10):
+            try:
+                tmp_path.write_bytes(data)
+                os.replace(tmp_path, path)
+                break
+            except (PermissionError, OSError):
+                if attempt == 9:
+                    raise
+                time.sleep(0.3)
         logger.info("  ✓ Saved checkpoint → %s  (val_loss=%.4f)", path, val_loss)
         return path
 

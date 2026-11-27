@@ -1,7 +1,7 @@
 Class,Precision,Recall,F1-Score,Support
 before,1.0,0.75,0.8571,4
 computer,0.0,0.0,0.0,1
-cool,0.1429,1.0,0.25,1
+cool,0.1667,1.0,0.2857,1
 cousin,0.0,0.0,0.0,1
 drink,0.0,0.0,0.0,2
 go,0.0,0.0,0.0,1

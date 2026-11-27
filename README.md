@@ -101,15 +101,15 @@ Exact metrics exported directly from [`results/model_comparison.csv`](results/mo
 
 | Model Name | Top-1 Accuracy | Top-3 Accuracy | Macro Precision | Macro Recall | Macro F1-Score | Weighted F1-Score | Parameter Count | Checkpoint Size (KB) | CPU Latency Mean (ms) | CPU Latency Std (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `CNNBaseline` | 0.2778 (27.78%) | 0.6111 (61.11%) | 0.1500 | **0.3000** | **0.1786** | 0.2103 | 278,410 | 3,283.28 | 1.1455 | 0.1850 |
-| `LSTMBaseline` | 0.0556 (5.56%) | 0.2222 (22.22%) | 0.0056 | 0.1000 | 0.0105 | 0.0058 | 1,254,410 | 14,715.86 | 3.8937 | 0.4726 |
-| `CNNLSTMStandard` | 0.2222 (22.22%) | 0.5000 (50.00%) | 0.1025 | 0.2000 | 0.1167 | 0.1667 | 1,328,010 | 15,592.64 | 2.7350 | 0.2649 |
-| `ProposedResCNNBiLSTMAttn` | **0.3333 (33.33%)** | **0.6111 (61.11%)** | **0.1810** | 0.2417 | 0.1774 | **0.3155** | 3,304,586 | 38,810.46 | 36.8470 | 7.8908 |
+| `CNNBaseline` | 0.2778 (27.78%) | 0.6111 (61.11%) | 0.1500 | 0.3000 | 0.1786 | 0.2103 | 278,410 | 3,282.25 | 0.7900 | 0.1980 |
+| `LSTMBaseline` | **0.3333 (33.33%)** | **0.8889 (88.89%)** | **0.3367** | **0.4750** | **0.3619** | 0.2765 | 1,254,410 | 14,714.77 | 1.8490 | 0.4182 |
+| `CNNLSTMStandard` | **0.3333 (33.33%)** | 0.7222 (72.22%) | 0.2833 | 0.4167 | 0.3133 | 0.2907 | 1,328,010 | 15,590.97 | 1.6433 | 0.4656 |
+| `ProposedResCNNBiLSTMAttn` | **0.3333 (33.33%)** | 0.6667 (66.67%) | 0.1833 | 0.2417 | 0.1810 | **0.3175** | 3,304,586 | 38,804.46 | 5.3638 | 0.9388 |
 
 ### Key Analytical Takeaways
-- **Why `LSTMBaseline` collapses (`5.56%`)**: Operating directly on raw 450-d frame vectors without multi-scale local temporal convolutions fails to extract localized hand-stroke motifs under stronger domain-shift regularization and limited unseen-signer data.
-- **Why `ProposedResCNNBiLSTMAttn` leads (`33.33%` Top-1, `61.11%` Top-3, `0.3155` Weighted F1)**: Combining multi-scale local temporal convolutions (`k=3, 5`) with bidirectional recurrence and frame-level self-attention outperforms `CNNLSTMStandard` by **+11.11 percentage points** Top-1 (`33.33%` vs. `22.22%`) and **+11.11 percentage points** Top-3 (`61.11%` vs. `50.00%`), while boosting Weighted F1 from `0.1667` to `0.3155` (and outperforming `CNNBaseline`'s `0.2103` Weighted F1 by `+0.1052`).
-- **Real-time CPU feasibility**: At `36.85 ms` mean CPU latency (`7.89 ms` std) per sequence (`~27` forward passes/sec at `batch_size=1`), `ProposedResCNNBiLSTMAttn` runs interactively on CPU without requiring a GPU.
+- **Sequence Modeling Beats Temporal Pooling**: All three temporal sequence models (`LSTMBaseline`, `CNNLSTMStandard`, `ProposedResCNNBiLSTMAttn`) reach **33.33% Top-1 Accuracy** on completely unseen signers, outperforming `CNNBaseline` (`27.78%` Top-1, `61.11%` Top-3, `0.2103` Weighted F1) whose global temporal pooling discards directional ordering.
+- **`ProposedResCNNBiLSTMAttn` Leads in Weighted F1 (`0.3175`) + Interpretability**: Achieving the highest **Weighted F1 (`0.3175`)** across all four architectures (`+0.0268` over `CNNLSTMStandard`, `+0.0410` over `LSTMBaseline`, `+0.1072` over `CNNBaseline`) alongside `66.67%` Top-3 accuracy (`before` F1 = `0.8571`, `who` F1 = `0.6667`), the proposed architecture also outputs 30-frame self-attention weights pinpointing the active gesture stroke. On sparse 1-support classes (`cousin`, `go`), `LSTMBaseline` reaches higher Macro F1 (`0.3619`) and `88.89%` Top-3 ranking accuracy.
+- **Real-time CPU feasibility**: At `5.36 ms` mean CPU latency (`0.94 ms` std) per sequence (`~186` forward passes/sec at `batch_size=1`), `ProposedResCNNBiLSTMAttn` runs interactively on CPU without requiring a GPU.
 
 ### Benchmark & Interpretability Visualizations
 
@@ -204,9 +204,9 @@ python -m src.evaluate --config config.yaml --data data/wlasl10_landmarks.npz --
 
 ## ⚠️ Honest Limitations & Future Roadmap
 
-- **Small-Sample Sparsity on Unseen Signers**: Even among the top-10 most populated WLASL glosses, only `147` clips are available (`13–16` per gloss). Under strict signer-disjoint splitting (`103` train / `26` val / `18` test), several test classes have only `support=1` or `2` from completely unseen signers (see [`results/per_class_metrics.csv`](results/per_class_metrics.csv)), causing `0.0` F1 on sparse classes and limiting Macro F1 (`0.1774`) despite `61.11%` Top-3 ranking accuracy.
-- **CPU Latency Variance**: While `ProposedResCNNBiLSTMAttn` averages `36.85 ms` on CPU, its standard deviation (`7.89 ms`) reflects multi-branch `Conv1d` + bidirectional LSTM scheduling across CPU threads.
+- **Small-Sample Sparsity on Unseen Signers**: Even among the top-10 most populated WLASL glosses, only `147` clips are available (`13–16` per gloss). Under strict signer-disjoint splitting (`103` train / `26` val / `18` test), several test classes have only `support=1` or `2` from completely unseen signers (see [`results/per_class_metrics.csv`](results/per_class_metrics.csv)), causing `0.0` F1 on sparse classes and limiting Macro F1 (`0.1810`) despite `66.67%` Top-3 ranking accuracy.
+- **Model Footprint vs. Baseline Speed**: `ProposedResCNNBiLSTMAttn` runs in `5.36 ms` mean CPU latency (`0.94 ms` std) and stores `3.30M` parameters (`38.8 MB`), versus `0.79–1.85 ms` (`0.28M–1.33M` parameters) for the lighter baselines.
 - **Future Roadmap**:
   - Scale training to **WLASL-100 / MS-ASL / AUTSL** with self-supervised pose pretraining to boost unseen-signer Top-1 generalization.
-  - Export `ProposedResCNNBiLSTMAttn` to **ONNX / TorchScript** for deterministic sub-10 ms edge latency.
+  - Export `ProposedResCNNBiLSTMAttn` to **ONNX / TorchScript** for cross-platform edge deployment without a PyTorch runtime.
   - Extend from isolated word glosses to **continuous sentence-level sign recognition** using CTC decoding over sliding temporal windows.
