@@ -122,7 +122,7 @@ class Trainer:
         self.optimizer = AdamW(
             self.model.parameters(),
             lr=self.config.get("learning_rate", 1e-3),
-            weight_decay=self.config.get("weight_decay", 1e-4),
+            weight_decay=self.config.get("weight_decay", 1e-2),
         )
         self.scheduler = CosineAnnealingLR(
             self.optimizer,

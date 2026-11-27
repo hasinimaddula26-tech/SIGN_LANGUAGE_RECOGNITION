@@ -36,6 +36,7 @@ from src.features import (
     _compute_velocity,
     _normalise_frame,
     _resample,
+    trim_active_motion,
 )
 from src.models import (
     CNNBaseline,
@@ -184,6 +185,26 @@ class TestResample:
         arr = np.random.randn(75, 450).astype(np.float32)
         out = _resample(arr, 30)
         assert out.shape == (30, 450)
+
+    def test_trim_active_motion_removes_idle_ends(self):
+        arr = np.zeros((40, 225), dtype=np.float32)
+        # Active gesture in frames 12..27 across hand coordinates 99:225
+        for t in range(12, 28):
+            arr[t, 99:225] = float(t - 11) * 0.1
+        # Keep trailing pose/hands static at last active value
+        arr[28:, 99:225] = arr[27, 99:225]
+        trimmed = trim_active_motion(arr, margin=3)
+        assert 15 <= len(trimmed) < 40
+        assert len(trimmed) == (27 - 12 + 1) + 6  # 16 active frames + 3 margin each side
+
+    def test_trim_active_motion_fallback_when_few_active_frames(self):
+        arr = np.zeros((25, 225), dtype=np.float32)
+        # Only 3 frames with movement (< 8 active frames) -> fallback to full clip
+        arr[10, 99:225] = 0.5
+        arr[11, 99:225] = 1.0
+        arr[12, 99:225] = 0.2
+        trimmed = trim_active_motion(arr, margin=3)
+        assert trimmed.shape == arr.shape
 
 
 # ─── Normalisation unit tests ─────────────────────────────────────────────────

@@ -160,8 +160,9 @@ def get_sample_ground_truth(sample_rel_path: str) -> str:
 def extract_video_landmarks(
     video_path: str,
     flip_horizontal: bool = False,
+    trim_idle: bool = False,
 ) -> np.ndarray:
-    """Decode video frames, optionally un-mirror horizontally, and extract (30, 450) features."""
+    """Decode video frames, optionally un-mirror & trim idle frames, and extract (30, 450)."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise gr.Error(f"Could not open video file: {video_path}")
@@ -181,7 +182,7 @@ def extract_video_landmarks(
 
     seq_len = int(CONFIG.get("sequence_length", 30))
     with LandmarkExtractor(sequence_length=seq_len, static_image_mode=False) as extractor:
-        return extractor.process_frames(frames)
+        return extractor.process_frames(frames, trim_idle=trim_idle)
 
 
 @spaces.GPU(duration=30)
@@ -213,12 +214,17 @@ def predict_sample_npy(sample_rel_path: str) -> Tuple[str, Dict[str, float], plt
 def predict_video_file(
     video_path: Optional[str],
     flip_horizontal: bool = False,
+    trim_idle: bool = False,
 ) -> Tuple[str, Dict[str, float], plt.Figure]:
     """Extract (30, 450) Holistic landmarks from an .mp4 / webcam clip and predict."""
     if not video_path:
         raise gr.Error("Please provide or record a video first.")
 
-    feat = extract_video_landmarks(video_path, flip_horizontal=flip_horizontal)
+    feat = extract_video_landmarks(
+        video_path,
+        flip_horizontal=flip_horizontal,
+        trim_idle=trim_idle,
+    )
     label, top_prob, probs, attn = _run_model_forward(feat)
     banner = _format_confidence_banner(label, top_prob)
     fig = plot_attention_weights(attn, label, top_prob)
@@ -228,8 +234,8 @@ def predict_video_file(
 def predict_webcam_video(
     video_path: Optional[str],
 ) -> Tuple[str, Dict[str, float], plt.Figure]:
-    """Un-mirror webcam frames horizontally before landmark extraction and inference."""
-    return predict_video_file(video_path, flip_horizontal=True)
+    """Un-mirror webcam frames and trim idle start/end frames before inference."""
+    return predict_video_file(video_path, flip_horizontal=True, trim_idle=True)
 
 
 # ─── Gradio Blocks UI ────────────────────────────────────────────────────────

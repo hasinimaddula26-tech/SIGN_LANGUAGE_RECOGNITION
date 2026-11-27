@@ -128,6 +128,43 @@ def _compute_velocity(coords: np.ndarray) -> np.ndarray:
     return vel.astype(np.float32)
 
 
+def trim_active_motion(
+    frames_landmarks: np.ndarray,
+    margin: int = 3,
+    min_active_frames: int = 8,
+    threshold_ratio: float = 0.20,
+) -> np.ndarray:
+    """Trim leading and trailing idle frames using hand-landmark speed.
+
+    Computes per-frame L2 norm of frame-to-frame hand coordinate differences
+    across indices ``99:225`` (21 left-hand + 21 right-hand × 3 coordinates).
+    Finds the contiguous window where hand speed exceeds ``20%`` of the clip's
+    90th-percentile hand speed, expands by ``±margin`` frames, and falls back
+    to the full clip if fewer than ``min_active_frames`` active frames exist.
+    """
+    T = frames_landmarks.shape[0]
+    if T < min_active_frames:
+        return frames_landmarks
+
+    hands = frames_landmarks[:, 99:225]
+    diffs = np.diff(hands, axis=0)
+    speed = np.zeros(T, dtype=np.float32)
+    speed[1:] = np.linalg.norm(diffs, axis=1)
+
+    p90 = float(np.percentile(speed, 90))
+    if p90 <= 1e-6:
+        return frames_landmarks
+
+    active_mask = speed > (threshold_ratio * p90)
+    if int(active_mask.sum()) < min_active_frames:
+        return frames_landmarks
+
+    active_idx = np.where(active_mask)[0]
+    start = max(0, int(active_idx[0]) - margin)
+    end = min(T, int(active_idx[-1]) + margin + 1)
+    return frames_landmarks[start:end]
+
+
 def _resample(seq: np.ndarray, target: int = 30) -> np.ndarray:
     """Resample a (T, D) array to exactly *target* frames.
 
@@ -197,13 +234,20 @@ class LandmarkExtractor:
 
     # ── Core API ──────────────────────────────────────────────────────────────
 
-    def process_frames(self, frames: Sequence[np.ndarray]) -> np.ndarray:
+    def process_frames(
+        self,
+        frames: Sequence[np.ndarray],
+        trim_idle: bool = False,
+    ) -> np.ndarray:
         """Convert a list of BGR frames into a (sequence_length, 450) array.
 
         Parameters
         ----------
         frames : list of np.ndarray
             Raw BGR uint8 frames from OpenCV (or synthetic arrays).
+        trim_idle : bool
+            If True, trim leading/trailing idle frames via ``trim_active_motion``
+            before computing final kinematic velocity and resampling.
 
         Returns
         -------
@@ -231,13 +275,14 @@ class LandmarkExtractor:
             raw_coords.append(kp75.flatten())          # (225,)
 
         coords = np.stack(raw_coords, axis=0)          # (T, 225)
-        vel    = _compute_velocity(coords)             # (T, 225)
-
-        # Replace any stray NaN/Inf (guard against edge cases)
         coords = np.nan_to_num(coords, nan=0.0, posinf=0.0, neginf=0.0)
+        if trim_idle:
+            coords = trim_active_motion(coords, margin=3)
+
+        vel    = _compute_velocity(coords)             # (T', 225)
         vel    = np.nan_to_num(vel,    nan=0.0, posinf=0.0, neginf=0.0)
 
-        combined = np.concatenate([coords, vel], axis=1)  # (T, 450)
+        combined = np.concatenate([coords, vel], axis=1)  # (T', 450)
         resampled = _resample(combined, self.sequence_length)  # (30, 450)
 
         assert resampled.shape == (self.sequence_length, N_FEATURES), (

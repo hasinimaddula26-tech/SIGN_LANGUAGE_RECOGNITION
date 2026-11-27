@@ -62,8 +62,11 @@ class SignLanguageDataset(Dataset):
         augment: bool = False,
         X: Optional[np.ndarray] = None,
         y: Optional[np.ndarray] = None,
-        jitter_std: float = 0.01,
+        jitter_std: float = 0.015,
         speed_range: Tuple[float, float] = (0.85, 1.15),
+        crop_range: Tuple[float, float] = (0.80, 1.00),
+        scale_range: Tuple[float, float] = (0.90, 1.10),
+        shift_range: Tuple[float, float] = (-0.03, 0.03),
         seed: Optional[int] = None,
     ) -> None:
         if X is not None and y is not None:
@@ -83,6 +86,9 @@ class SignLanguageDataset(Dataset):
         self.augment = augment
         self.jitter_std = jitter_std
         self.speed_range = speed_range
+        self.crop_range = crop_range
+        self.scale_range = scale_range
+        self.shift_range = shift_range
         self._rng = np.random.default_rng(seed)
 
     def __len__(self) -> int:
@@ -102,30 +108,34 @@ class SignLanguageDataset(Dataset):
                 rng=self._rng,
                 speed_range=self.speed_range,
                 jitter_std=self.jitter_std,
+                crop_range=self.crop_range,
+                scale_range=self.scale_range,
+                shift_range=self.shift_range,
             )
 
         x = torch.from_numpy(np.ascontiguousarray(feat, dtype=np.float32))
         y = torch.tensor(label, dtype=torch.long)
         return x, y
 
-    # ── Kinematic Augmentation (Train Only) ──────────────────────────────────
+    # ── Kinematic & Domain-Shift Augmentation (Train Only) ───────────────────
 
     @staticmethod
     def _augment(
         feat: np.ndarray,
         rng: Optional[np.random.Generator] = None,
         speed_range: Tuple[float, float] = (0.85, 1.15),
-        jitter_std: float = 0.01,
+        jitter_std: float = 0.015,
+        crop_range: Tuple[float, float] = (0.80, 1.00),
+        scale_range: Tuple[float, float] = (0.90, 1.10),
+        shift_range: Tuple[float, float] = (-0.03, 0.03),
     ) -> np.ndarray:
-        """Apply random temporal speed resampling (±15%) and Gaussian joint jitter.
+        """Apply webcam-robust temporal + spatial augmentations to training clips.
 
-        1. Extract normalised coordinates ``feat[:, :225]`` of shape ``(T, 225)``.
-        2. Resample along the temporal axis at a random speed in ``[0.85, 1.15]``
-           using linear interpolation, then resample back to ``T`` (edge-pad or
-           uniform subsample).
-        3. Add Gaussian noise ``N(0, jitter_std)`` to detected (non-zero) joints.
-        4. Recompute kinematic velocity ``vel = Δcoords`` (with ``vel[0] = 0``)
-           and concatenate back to ``(T, 450)`` float32.
+        1. Random temporal crop (80%–100% contiguous window) resampled back to T.
+        2. Random temporal speed resampling (±15%).
+        3. Random spatial scale jitter (0.90x–1.10x) & shoulder-center shift (±0.03).
+        4. Gaussian joint jitter (std=0.015) on detected (non-zero) joints.
+        5. Recompute consistent velocity ``vel = Δcoords`` (with ``vel[0] = 0``).
         """
         if rng is None:
             rng = np.random.default_rng()
@@ -134,7 +144,20 @@ class SignLanguageDataset(Dataset):
         n_coords = min(N_COORDS, D // 2) if D >= 2 else D
         coords = feat[:, :n_coords].astype(np.float32, copy=True)
 
-        # 1. Random temporal speed resampling (±15%)
+        # 1. Random temporal crop (80%–100% contiguous window) resampled to T
+        crop_ratio = float(rng.uniform(crop_range[0], crop_range[1]))
+        crop_len = max(2, min(T, int(round(T * crop_ratio))))
+        if crop_len < T:
+            start = int(rng.integers(0, T - crop_len + 1))
+            cropped = coords[start : start + crop_len]
+            src_t = np.arange(crop_len, dtype=np.float32)
+            dst_t = np.linspace(0.0, crop_len - 1, T, dtype=np.float32)
+            resampled = np.empty((T, n_coords), dtype=np.float32)
+            for col in range(n_coords):
+                resampled[:, col] = np.interp(dst_t, src_t, cropped[:, col])
+            coords = resampled
+
+        # 2. Random temporal speed resampling (±15%)
         speed = float(rng.uniform(speed_range[0], speed_range[1]))
         t_new = max(2, int(round(T / speed)))
         if t_new != T:
@@ -145,20 +168,25 @@ class SignLanguageDataset(Dataset):
                 warped[:, col] = np.interp(dst_t, src_t, coords[:, col])
             coords = _resample(warped, target=T)
 
-        # 2. Small Gaussian joint jitter (only on non-zero / detected coordinates)
-        if jitter_std > 0.0:
-            if n_coords % 3 == 0:
-                kp = coords.reshape(T, n_coords // 3, 3)
-                detected = np.any(kp != 0.0, axis=-1, keepdims=True)
-                noise = rng.normal(0.0, jitter_std, size=kp.shape).astype(np.float32)
-                kp = kp + noise * detected
-                coords = kp.reshape(T, n_coords)
-            else:
-                detected = coords != 0.0
-                noise = rng.normal(0.0, jitter_std, size=coords.shape).astype(np.float32)
-                coords = coords + noise * detected
+        # 3. Spatial scale jitter (0.90x–1.10x), shoulder-center shift (±0.03), & joint noise
+        scale = float(rng.uniform(scale_range[0], scale_range[1]))
+        shift = rng.uniform(shift_range[0], shift_range[1], size=(1, 1, 3)).astype(np.float32)
+        if n_coords % 3 == 0:
+            kp = coords.reshape(T, n_coords // 3, 3)
+            detected = np.any(kp != 0.0, axis=-1, keepdims=True)
+            kp = kp * scale + shift
+            if jitter_std > 0.0:
+                kp = kp + rng.normal(0.0, jitter_std, size=kp.shape).astype(np.float32)
+            kp = kp * detected
+            coords = kp.reshape(T, n_coords)
+        else:
+            detected = coords != 0.0
+            coords = coords * scale + float(shift[0, 0, 0])
+            if jitter_std > 0.0:
+                coords = coords + rng.normal(0.0, jitter_std, size=coords.shape).astype(np.float32)
+            coords = coords * detected
 
-        # 3. Recompute consistent velocity along temporal axis
+        # 4. Recompute consistent velocity along temporal axis
         if D == n_coords * 2:
             vel = _compute_velocity(coords)
             out = np.concatenate([coords, vel], axis=1)
